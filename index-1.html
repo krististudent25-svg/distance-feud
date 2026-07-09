@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Distance Feud — An LDR Family Feud</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!--
+=====================================================================
+ SUPABASE SETUP — READ ME FIRST
+=====================================================================
+ This game needs a free Supabase project (Realtime + a database table)
+ so both of you can play from two different devices/locations and see
+ each other's moves live. Follow the non-technical guide you were given
+ alongside this file, then paste your Project URL and anon public key
+ into the `SUPABASE_URL` / `SUPABASE_ANON_KEY` constants below (search
+ for "PASTE YOUR SUPABASE CONFIG HERE" a bit further down in this file).
+
+ You only have to do this once. After that, just re-upload this same
+ file (with your keys already in it) anywhere that hosts static
+ files — GitHub Pages, Netlify, Vercel all work great and are free.
+=====================================================================
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root{
+    --night:#0B1026;
+    --dusk:#141B34;
+    --dusk2:#1C2547;
+    --gold:#E8B84B;
+    --gold-dim:#a8863b;
+    --p1:#5B8DEF;
+    --p1-glow:rgba(91,141,239,0.45);
+    --p2:#FF6B9D;
+    --p2-glow:rgba(255,107,157,0.45);
+    --ink:#F3F1EA;
+    --ink-dim:#9AA3C7;
+    --line:rgba(255,255,255,0.09);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse 80% 50% at 15% 0%, rgba(91,141,239,0.16), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 85% 100%, rgba(255,107,157,0.14), transparent 60%),
+      var(--night);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.6;}
+  .stars span{
+    position:absolute; width:2px;height:2px;background:#fff;border-radius:50%;
+    animation:twinkle 3.5s ease-in-out infinite;
+  }
+  @keyframes twinkle{0%,100%{opacity:.15}50%{opacity:.9}}
+
+  h1,h2,h3,.display{font-family:'Fraunces',serif;}
+  .eyebrow{
+    font-family:'Inter',sans-serif; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--gold); font-weight:700;
+  }
+
+  .app{position:relative;z-index:1; max-width:980px; margin:0 auto; padding:28px 18px 60px;}
+
+  /* ---------- Home / Lobby shared card ---------- */
+  .card{
+    background:linear-gradient(180deg, var(--dusk), var(--dusk2));
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:32px 28px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  }
+  .hero-title{font-size:clamp(32px,7vw,52px); font-weight:900; line-height:1.02; margin:6px 0 4px; letter-spacing:-0.01em;}
+  .hero-title em{font-style:italic; color:var(--gold); font-weight:600;}
+  .hero-sub{color:var(--ink-dim); font-size:15px; max-width:520px; line-height:1.5; margin-bottom:26px;}
+
+  label{display:block; font-size:12px; color:var(--ink-dim); margin-bottom:6px; letter-spacing:.03em;}
+  input[type=text]{
+    width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--line); color:var(--ink);
+    padding:13px 14px; border-radius:12px; font-size:16px; font-family:'Inter',sans-serif;
+    outline:none; transition:border-color .15s;
+  }
+  input[type=text]:focus{border-color:var(--gold);}
+  input[type=text]::placeholder{color:#5b6285;}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--gold); color:#1a1408; border:none; font-weight:700; font-size:15px;
+    padding:13px 22px; border-radius:12px; cursor:pointer; transition:transform .12s, box-shadow .12s, opacity .12s;
+    font-family:'Inter',sans-serif;
+  }
+  .btn:hover{transform:translateY(-1px); box-shadow:0 8px 22px rgba(232,184,75,0.25);}
+  .btn:active{transform:translateY(0);}
+  .btn:disabled{opacity:.35; cursor:not-allowed; transform:none; box-shadow:none;}
+  .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--gold); box-shadow:none;}
+  .btn-p1{background:var(--p1); color:#fff;}
+  .btn-p2{background:var(--p2); color:#fff;}
+  .btn-danger{background:transparent; border:1px solid #7a3040; color:#ff8fa3;}
+
+  .row{display:flex; gap:12px; flex-wrap:wrap;}
+  .row > *{flex:1; min-width:160px;}
+  .divider-or{
+    display:flex; align-items:center; gap:14px; margin:26px 0; color:var(--ink-dim); font-size:12px;
+    letter-spacing:.1em; text-transform:uppercase;
+  }
+  .divider-or::before,.divider-or::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  /* ---------- Bridge signature element ---------- */
+  .bridge{
+    display:flex; align-items:center; justify-content:center; gap:0; margin:30px 0 10px; height:64px; position:relative;
+  }
+  .bridge .node{
+    width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-family:'Fraunces',serif; font-weight:700; font-size:20px; flex-shrink:0; z-index:2;
+    border:2px solid; transition:all .3s;
+  }
+  .bridge .node.off{border-color:var(--line); color:var(--ink-dim); background:rgba(255,255,255,0.02);}
+  .bridge .node.p1{border-color:var(--p1); color:var(--p1); background:var(--p1-glow); box-shadow:0 0 22px var(--p1-glow);}
+  .bridge .node.p2{border-color:var(--p2); color:var(--p2); background:var(--p2-glow); box-shadow:0 0 22px var(--p2-glow);}
+  .bridge .thread{
+    flex:1; height:2px; margin:0 -2px; position:relative;
+    background:repeating-linear-gradient(90deg, var(--line) 0 8px, transparent 8px 16px);
+  }
+  .bridge .thread.live::after{
+    content:""; position:absolute; inset:0; height:2px;
+    background:linear-gradient(90deg, var(--p1), var(--gold), var(--p2));
+    background-size:200% 100%; animation:flow 2.4s linear infinite;
+  }
+  @keyframes flow{0%{background-position:0% 0%}100%{background-position:200% 0%}}
+
+  .players-status{display:flex; justify-content:space-between; margin-top:8px; font-size:13px; color:var(--ink-dim);}
+
+  /* ---------- Game screen ---------- */
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
+  .roomchip{font-size:12px; color:var(--ink-dim); border:1px solid var(--line); padding:6px 12px; border-radius:999px; letter-spacing:.05em;}
+  .scores{display:flex; gap:10px;}
+  .scorepill{
+    display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; font-size:14px; font-weight:700;
+    border:1px solid var(--line); background:rgba(255,255,255,0.03);
+  }
+  .scorepill .dot{width:9px;height:9px;border-radius:50%;}
+  .scorepill.me{border-color:currentColor;}
+
+  .board-card{
+    background:linear-gradient(180deg, var(--dusk), var(--dusk2));
+    border:1px solid var(--line); border-radius:20px; padding:26px 22px; margin-bottom:18px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  }
+  .category-tag{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:700; margin-bottom:8px;}
+  .question-text{font-family:'Fraunces',serif; font-weight:600; font-size:clamp(20px,3.6vw,28px); line-height:1.3; margin-bottom:22px;}
+
+  .answers{display:flex; flex-direction:column; gap:9px; margin-bottom:6px;}
+  .ans-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:12px;
+    padding:13px 16px; font-size:15px; transition:background .25s, border-color .25s;
+  }
+  .ans-row .rank{
+    width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,0.06); color:var(--ink-dim);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0;
+  }
+  .ans-row .txt{flex:1; letter-spacing:.06em; color:#6c7395; font-family:'Inter',sans-serif; font-weight:600; text-transform:uppercase; filter:blur(0);}
+  .ans-row .pts{font-weight:800; color:var(--ink-dim); min-width:32px; text-align:right;}
+  .ans-row.revealed{background:rgba(232,184,75,0.09); border-color:rgba(232,184,75,0.35); animation:pop .4s ease;}
+  .ans-row.revealed .txt{color:var(--ink); text-transform:none;}
+  .ans-row.revealed .rank{background:var(--gold); color:#1a1408;}
+  .ans-row.revealed .pts{color:var(--gold);}
+  @keyframes pop{0%{transform:scale(0.97); opacity:.5}60%{transform:scale(1.01)}100%{transform:scale(1)}}
+
+  .timer-wrap{display:flex; align-items:center; gap:14px; margin:18px 0;}
+  .timer-ring{
+    width:56px;height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:16px; border:3px solid var(--line); flex-shrink:0; font-family:'Fraunces',serif;
+  }
+  .timer-ring.warn{border-color:#ff6b6b; color:#ff6b6b;}
+  .timer-track{flex:1; height:8px; background:rgba(255,255,255,0.06); border-radius:999px; overflow:hidden;}
+  .timer-fill{height:100%; background:linear-gradient(90deg,var(--gold),var(--p2)); transition:width 1s linear;}
+
+  .guess-row{display:flex; gap:10px; margin-top:14px;}
+  .guess-row input{flex:1;}
+  .feedback{min-height:22px; font-size:13px; margin-top:10px; font-weight:600;}
+  .feedback.good{color:#7CE0A0;}
+  .feedback.bad{color:#ff8f8f;}
+
+  .spectate-note{
+    display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.03); border:1px dashed var(--line);
+    border-radius:12px; padding:14px 16px; font-size:13px; color:var(--ink-dim); margin-top:14px;
+  }
+
+  .cat-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-top:18px;}
+  .cat-btn{
+    text-align:left; background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:14px;
+    padding:18px; cursor:pointer; transition:all .15s; color:var(--ink);
+  }
+  .cat-btn:hover{border-color:var(--gold); background:rgba(232,184,75,0.06); transform:translateY(-2px);}
+  .cat-btn .name{font-family:'Fraunces',serif; font-weight:700; font-size:18px;}
+  .cat-btn .left{font-size:12px; color:var(--ink-dim); margin-top:4px;}
+  .cat-btn[data-flirty="1"] .name::after{content:" 🔥"; }
+
+  .buzz-zone{display:flex; flex-direction:column; align-items:center; gap:18px; padding:30px 0;}
+  .buzzer{
+    width:170px; height:170px; border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, var(--gold), var(--gold-dim));
+    color:#1a1408; font-family:'Fraunces',serif; font-weight:800; font-size:22px;
+    box-shadow:0 0 0 8px rgba(232,184,75,0.12), 0 20px 50px rgba(232,184,75,0.25);
+    transition:transform .1s;
+  }
+  .buzzer:active{transform:scale(0.95);}
+  .buzzer:disabled{opacity:.3; cursor:not-allowed; box-shadow:none;}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(5,7,20,0.75); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal{
+    background:var(--dusk2); border:1px solid var(--line); border-radius:18px; padding:28px; max-width:420px;
+    box-shadow:0 30px 80px rgba(0,0,0,0.5);
+  }
+
+  .hidden{display:none !important;}
+  .center-note{text-align:center; color:var(--ink-dim); font-size:13px; margin-top:16px;}
+  .footer-note{text-align:center; color:#4d537a; font-size:12px; margin-top:30px;}
+  a{color:var(--gold);}
+
+  ::selection{background:var(--gold); color:#1a1408;}
+
+  @media(max-width:520px){
+    .card{padding:24px 18px;}
+    .buzzer{width:140px;height:140px;font-size:18px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div class="app">
+
+  <!-- ============ HOME SCREEN ============ -->
+  <div id="screen-home">
+    <div class="card">
+      <div class="eyebrow">A two-player game show for couples apart</div>
+      <h1 class="hero-title">The Distance <em>Feud</em></h1>
+      <p class="hero-sub">No host, no problem. Survey says: you two can run this whole game yourselves, from two different cities, in real time.</p>
+
+      <label for="nameInput">Your name</label>
+      <input type="text" id="nameInput" placeholder="e.g. Kristi" maxlength="20" style="margin-bottom:20px;">
+
+      <div class="row">
+        <div>
+          <label for="roomCreate">Start a new game</label>
+          <button class="btn" id="btnCreate" style="width:100%;">✦ Create a Room</button>
+        </div>
+      </div>
+
+      <div class="divider-or">or join theirs</div>
+
+      <div class="row">
+        <div style="flex:2;">
+          <label for="roomJoin">Room code from your partner</label>
+          <input type="text" id="roomJoin" placeholder="e.g. LUNA" maxlength="6" style="text-transform:uppercase;">
+        </div>
+        <div style="flex:1; align-self:flex-end;">
+          <button class="btn btn-ghost" id="btnJoin" style="width:100%;">Join Room</button>
+        </div>
+      </div>
+
+      <p class="center-note" id="homeError"></p>
+    </div>
+    <p class="footer-note">Supabase not configured yet? Check the comment at the top of this file, or your setup guide.</p>
+  </div>
+
+  <!-- ============ LOBBY SCREEN ============ -->
+  <div id="screen-lobby" class="hidden">
+    <div class="card">
+      <div class="eyebrow">Room</div>
+      <h2 style="margin:4px 0 20px; font-size:28px;">Code: <span id="lobbyCode" style="color:var(--gold);"></span></h2>
+
+      <div class="bridge">
+        <div class="node off" id="nodeP1">?</div>
+        <div class="thread" id="threadEl"></div>
+        <div class="node off" id="nodeP2">?</div>
+      </div>
+      <div class="players-status">
+        <span id="statusP1">Waiting…</span>
+        <span id="statusP2">Waiting…</span>
+      </div>
+
+      <div style="margin-top:28px;">
+        <label>Rounds to play</label>
+        <div class="row" id="roundsPicker">
+          <button class="btn btn-ghost" data-r="4">4</button>
+          <button class="btn btn-ghost" data-r="6">6 (default)</button>
+          <button class="btn btn-ghost" data-r="8">8</button>
+        </div>
+      </div>
+
+      <button class="btn" id="btnStartGame" style="width:100%; margin-top:26px;" disabled>Waiting for both of you…</button>
+      <p class="center-note">Share the room code above with your partner so they can join from their device.</p>
+      <p class="center-note">💡 Keep reusing this same room code for future game nights — the app remembers every question you've already played (up to all 500!) and won't repeat one until the whole bank has been used.</p>
+    </div>
+  </div>
+
+  <!-- ============ GAME SCREEN ============ -->
+  <div id="screen-game" class="hidden">
+    <div class="topbar">
+      <div class="roomchip">Room <b id="gameRoomCode"></b> · Round <span id="roundNum">1</span>/<span id="roundTotal">6</span></div>
+      <div class="scores">
+        <div class="scorepill" id="pillP1" style="color:var(--p1);"><span class="dot" style="background:var(--p1);"></span><span id="nameP1Score">Player 1</span>: <span id="scoreP1">0</span></div>
+        <div class="scorepill" id="pillP2" style="color:var(--p2);"><span class="dot" style="background:var(--p2);"></span><span id="nameP2Score">Player 2</span>: <span id="scoreP2">0</span></div>
+      </div>
+    </div>
+
+    <!-- Category pick -->
+    <div id="phase-category" class="board-card hidden">
+      <div class="category-tag" id="pickerLabel">Your pick</div>
+      <h2 class="question-text" style="margin-bottom:6px;">Choose a category for this round</h2>
+      <div class="cat-grid" id="catGrid"></div>
+      <div class="spectate-note hidden" id="waitingForPick">Your partner is choosing a category…</div>
+    </div>
+
+    <!-- Face-off -->
+    <div id="phase-faceoff" class="board-card hidden">
+      <div class="category-tag" id="faceoffCat">Category</div>
+      <h2 class="question-text" id="faceoffQuestion"></h2>
+      <div class="answers" id="faceoffAnswers"></div>
+
+      <div class="buzz-zone" id="buzzZone">
+        <button class="buzzer" id="btnBuzz">BUZZ IN</button>
+        <div class="center-note">First to buzz gets the first guess.</div>
+      </div>
+
+      <div id="faceoffGuessArea" class="hidden">
+        <div class="guess-row">
+          <input type="text" id="faceoffGuessInput" placeholder="Type your answer…" autocomplete="off">
+          <button class="btn" id="btnFaceoffGuess">Answer</button>
+        </div>
+        <p class="feedback" id="faceoffFeedback"></p>
+      </div>
+      <div class="spectate-note hidden" id="faceoffWaiting"></div>
+    </div>
+
+    <!-- Play -->
+    <div id="phase-play" class="board-card hidden">
+      <div class="category-tag" id="playCat">Category</div>
+      <h2 class="question-text" id="playQuestion"></h2>
+
+      <div class="timer-wrap">
+        <div class="timer-ring" id="timerRing">60</div>
+        <div class="timer-track"><div class="timer-fill" id="timerFill" style="width:100%;"></div></div>
+      </div>
+
+      <div class="answers" id="playAnswers"></div>
+
+      <div id="playInputArea" class="hidden">
+        <div class="guess-row">
+          <input type="text" id="playGuessInput" placeholder="Type an answer…" autocomplete="off">
+          <button class="btn" id="btnPlayGuess">Guess</button>
+        </div>
+        <p class="feedback" id="playFeedback"></p>
+      </div>
+      <div class="spectate-note hidden" id="playWaiting">
+        💛 It's your partner's turn — you're spectating live. Cheer them on!
+      </div>
+    </div>
+
+    <!-- Round end -->
+    <div id="phase-roundend" class="board-card hidden">
+      <div class="category-tag">Round complete</div>
+      <h2 class="question-text" id="roundEndTitle">Nice round!</h2>
+      <div class="answers" id="roundEndAnswers"></div>
+      <p class="center-note" id="roundEndScoreLine" style="margin-top:14px; font-size:15px; color:var(--ink);"></p>
+      <button class="btn" id="btnNextRound" style="width:100%; margin-top:18px;">Continue</button>
+      <div class="spectate-note hidden" id="roundEndWaiting">Waiting for your partner to continue…</div>
+    </div>
+
+    <!-- Game over -->
+    <div id="phase-gameover" class="board-card hidden" style="text-align:center;">
+      <div class="eyebrow">Final Survey</div>
+      <h1 class="hero-title" id="gameOverTitle" style="margin:10px 0;">It's a tie!</h1>
+      <p class="hero-sub" id="gameOverSub" style="margin:0 auto 24px;"></p>
+      <button class="btn" id="btnPlayAgain">Play Again</button>
+    </div>
+  </div>
+
+  <!-- Flirty gate modal -->
+  <div id="flirtyModal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 style="margin-top:0;">Hot &amp; Flirty category 🔥</h3>
+      <p style="color:var(--ink-dim); font-size:14px; line-height:1.5;">This category is a little spicier — playful, suggestive fun made for the two of you. Both of you should be comfortable (and 18+) before continuing.</p>
+      <div class="row" style="margin-top:20px;">
+        <button class="btn btn-ghost" id="flirtyCancel">Never mind</button>
+        <button class="btn" id="flirtyConfirm">We're in 😉</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =====================================================================
+   SUPABASE CONFIG — PASTE YOUR SUPABASE CONFIG HERE
+   -------------------------------------------------------------------
+   1. Go to https://supabase.com and create a free project.
+   2. In your project, open the SQL Editor and run the "create table"
+      command from the setup guide (creates a `rooms` table).
+   3. Go to Project Settings > Data API. Copy your "Project URL" and
+      your "anon public" API key, and paste them below.
+   4. See the non-technical guide for exact screenshots/steps.
+===================================================================== */
+const SUPABASE_URL = "https://unprnewvmhyyrwapcqzw.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVucHJuZXd2bWh5eXJ3YXBjcXp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjAyMjQsImV4cCI6MjA5OTEzNjIyNH0.BmyxooKnbUeWRe52Wca2ecaTApdUIF7RHfqTzHYhQss";
+
+let sb = null;
+let backendReady = false;
+try{
+  if(SUPABASE_URL.includes("PASTE_YOUR") || SUPABASE_ANON_KEY.includes("PASTE_YOUR")){
+    throw new Error("Supabase config not filled in yet");
+  }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  backendReady = true;
+}catch(e){
+  console.warn("Supabase not configured yet:", e);
+}
+
+/* =====================================================================
+   SUPABASE ROOM ADAPTER
+   -------------------------------------------------------------------
+   This small wrapper mimics a Firebase-style "reference" (on/off/set/
+   update/child/transaction) but is backed by a single Postgres table
+   called `rooms` with columns: code (text) and state (jsonb). Every
+   piece of live game state lives inside that one `state` JSON blob,
+   and Supabase Realtime pushes any change to both players instantly.
+===================================================================== */
+class SupaRoomRef{
+  constructor(client, code){
+    this.sb = client; this.code = code; this._local = null; this._channel = null;
+  }
+  async _fetch(){
+    const {data, error} = await this.sb.from("rooms").select("state").eq("code", this.code).maybeSingle();
+    if(error){ console.error(error); return null; }
+    return data ? data.state : null;
+  }
+  async set(fullState){
+    this._local = fullState;
+    const {error} = await this.sb.from("rooms").upsert({code:this.code, state:fullState}, {onConflict:"code"});
+    if(error) throw error;
+    return fullState;
+  }
+  async update(partial){
+    const current = this._local || (await this._fetch()) || {};
+    const merged = {...current, ...partial};
+    this._local = merged;
+    const {error} = await this.sb.from("rooms").update({state:merged}).eq("code", this.code);
+    if(error) throw error;
+    return merged;
+  }
+  child(path){
+    const parts = path.split("/");
+    const self = this;
+    async function setNested(value){
+      const current = self._local || (await self._fetch()) || {};
+      const updated = JSON.parse(JSON.stringify(current));
+      let ptr = updated;
+      for(let i=0;i<parts.length-1;i++){ ptr[parts[i]] = ptr[parts[i]] || {}; ptr = ptr[parts[i]]; }
+      ptr[parts[parts.length-1]] = value;
+      self._local = updated;
+      const {error} = await self.sb.from("rooms").update({state:updated}).eq("code", self.code);
+      if(error) throw error;
+      return updated;
+    }
+    return {
+      set: (value)=> setNested(value),
+      transaction: async (fn)=>{
+        const current = self._local || (await self._fetch()) || {};
+        let ptr = current;
+        for(let i=0;i<parts.length-1;i++) ptr = (ptr && ptr[parts[i]]) || {};
+        const currentVal = (ptr && ptr[parts[parts.length-1]] !== undefined) ? ptr[parts[parts.length-1]] : null;
+        const newVal = fn(currentVal);
+        if(newVal===undefined) return; // Firebase-style abort: leave as-is
+        await setNested(newVal);
+      }
+    };
+  }
+  on(event, cb){
+    this._fetch().then(state=>{ if(state){ this._local = state; cb({val:()=>state}); } });
+    this._channel = this.sb.channel("room_changes_"+this.code)
+      .on("postgres_changes", {event:"*", schema:"public", table:"rooms", filter:`code=eq.${this.code}`}, payload=>{
+        const state = payload.new ? payload.new.state : null;
+        if(state){ this._local = state; cb({val:()=>state}); }
+      })
+      .subscribe();
+  }
+  off(){ if(this._channel){ this.sb.removeChannel(this._channel); this._channel=null; } }
+  get(){
+    return this._fetch().then(state=>{
+      if(state) this._local = state;
+      return { exists: ()=> !!state, val: ()=> state };
+    });
+  }
+}
+
+/* =====================================================================
+   QUESTION BANK
+   -------------------------------------------------------------------
+   Structure: { name, flirty(bool), questions:[ {q, answers:[{t,p}]} ] }
+   Each question has exactly 5 ranked answers with point values.
+   Starter bank: 12 questions per category (60 total). To add more,
+   just copy the pattern of one question object and paste it into the
+   matching category's `questions` array — no other code changes needed.
+===================================================================== */
+const CATEGORIES = [
+  { key:"romantic", name:"Romantic", flirty:false, questions:[
+    {q:"Name a place couples love to go on a first date.", answers:[{t:"Restaurant",p:35},{t:"Movies",p:25},{t:"Coffee shop",p:18},{t:"Park",p:13},{t:"Beach",p:9}]},
+    {q:"What's a classic romantic gesture?", answers:[{t:"Flowers",p:38},{t:"Candlelit dinner",p:24},{t:"Love letter",p:17},{t:"Surprise gift",p:12},{t:"Slow dance",p:9}]},
+    {q:"Name something couples do to say \"I love you\" without words.", answers:[{t:"Hug",p:32},{t:"Hold hands",p:26},{t:"Kiss on the forehead",p:18},{t:"Cook for them",p:14},{t:"A certain look",p:10}]},
+    {q:"Name a song considered one of the most romantic of all time.", answers:[{t:"Perfect",p:30},{t:"At Last",p:24},{t:"All of Me",p:20},{t:"Can't Help Falling in Love",p:16},{t:"Thinking Out Loud",p:10}]},
+    {q:"Name a place people commonly propose.", answers:[{t:"Beach",p:30},{t:"Restaurant",p:24},{t:"At home",p:20},{t:"On a hike / mountaintop",p:15},{t:"Sports stadium",p:11}]},
+    {q:"What's the first thing you notice about someone you're falling for?", answers:[{t:"Their smile",p:34},{t:"Their eyes",p:26},{t:"Sense of humor",p:18},{t:"How they treat others",p:13},{t:"Their voice",p:9}]},
+    {q:"Name something you'd write in a love letter.", answers:[{t:"I love you",p:35},{t:"A shared memory",p:24},{t:"Why you love them",p:20},{t:"Future plans together",p:13},{t:"An inside joke",p:8}]},
+    {q:"Name a romantic weekend getaway spot.", answers:[{t:"Beach",p:28},{t:"Cabin in the woods",p:24},{t:"Big city",p:20},{t:"Vineyard / winery",p:16},{t:"Mountains",p:12}]},
+    {q:"Name something couples do on an anniversary.", answers:[{t:"Dinner date",p:32},{t:"Exchange gifts",p:25},{t:"Look at old photos",p:18},{t:"Take a trip",p:15},{t:"Recreate their first date",p:10}]},
+    {q:"What's something people say when they propose?", answers:[{t:"Will you marry me",p:45},{t:"I love you",p:20},{t:"You're my forever",p:15},{t:"Let's do this forever",p:12},{t:"I can't imagine life without you",p:8}]},
+    {q:"Name a way to show someone you're thinking of them.", answers:[{t:"Text \"good morning\"",p:30},{t:"Send a gift",p:24},{t:"Call just because",p:20},{t:"Leave a note",p:16},{t:"Share a memory or photo",p:10}]},
+    {q:"Name a nickname couples might call each other.", answers:[{t:"Babe",p:30},{t:"Honey",p:24},{t:"Love",p:20},{t:"Baby",p:16},{t:"Sweetheart",p:10}]},
+    {q:"Name something romantic you do for someone on Valentine's Day.", answers:[{t:"Flowers",p:32},{t:"Chocolate",p:26},{t:"Dinner date",p:20},{t:"A card or love note",p:13},{t:"Jewelry",p:9}]},
+    {q:"Name a romantic movie couples like to watch together.", answers:[{t:"The Notebook",p:30},{t:"Titanic",p:26},{t:"Notting Hill",p:18},{t:"La La Land",p:15},{t:"Pride and Prejudice",p:11}]},
+    {q:"Name something you'd do to plan the \"perfect\" date.", answers:[{t:"Pick their favorite restaurant",p:30},{t:"Surprise them",p:24},{t:"Plan a special activity",p:20},{t:"Dress up",p:15},{t:"Set the mood with music or candles",p:11}]},
+    {q:"Name a way people express affection through touch.", answers:[{t:"Hugging",p:32},{t:"Holding hands",p:26},{t:"Kissing",p:20},{t:"Cuddling",p:13},{t:"A gentle touch on the arm",p:9}]},
+    {q:"Name something couples like to do together at sunset.", answers:[{t:"Watch it on the beach",p:30},{t:"Take a walk",p:24},{t:"Have a picnic",p:20},{t:"Take photos",p:15},{t:"Share a drink",p:11}]},
+    {q:"Name a romantic thing to say on a first date.", answers:[{t:"I'm really enjoying this",p:28},{t:"You're beautiful / handsome",p:24},{t:"I'd love to see you again",p:20},{t:"Tell me more about you",p:16},{t:"This feels different",p:12}]},
+    {q:"Name a gift that says \"I love you.\"", answers:[{t:"Jewelry",p:30},{t:"Flowers",p:26},{t:"A handwritten letter",p:20},{t:"A photo album or frame",p:14},{t:"A ring",p:10}]},
+    {q:"Name something a couple might do to celebrate falling in love.", answers:[{t:"Take a trip",p:28},{t:"Have a special dinner",p:24},{t:"Tell close friends or family",p:20},{t:"Take a couple's photo",p:16},{t:"Write down the memory",p:12}]},
+    {q:"Name a romantic city people dream of visiting together.", answers:[{t:"Paris",p:34},{t:"Venice",p:26},{t:"Rome",p:18},{t:"New York",p:13},{t:"Santorini",p:9}]},
+    {q:"Name something you'd do to surprise your partner romantically.", answers:[{t:"Plan a surprise trip",p:28},{t:"Cook a special dinner",p:24},{t:"Fill the room with candles or flowers",p:20},{t:"Write them a letter",p:16},{t:"Plan a surprise visit",p:12}]},
+    {q:"Name a romantic tradition couples start together.", answers:[{t:"Weekly date night",p:30},{t:"Anniversary trip",p:24},{t:"A special song",p:18},{t:"Cooking together",p:16},{t:"A yearly ritual",p:12}]},
+    {q:"Name something couples like to do while cuddling.", answers:[{t:"Watch a movie",p:30},{t:"Talk about their day",p:24},{t:"Fall asleep",p:20},{t:"Listen to music",p:15},{t:"Just be quiet together",p:11}]},
+    {q:"Name a way to end a perfect date.", answers:[{t:"A goodnight kiss",p:32},{t:"A hug",p:24},{t:"\"I had a great time\"",p:20},{t:"Making plans to meet again",p:14},{t:"Walking them to the door",p:10}]},
+    {q:"Name something romantic about handwritten letters.", answers:[{t:"They feel more personal",p:30},{t:"You can keep them forever",p:26},{t:"They take more effort",p:18},{t:"They show real feelings",p:15},{t:"They're a keepsake",p:11}]},
+    {q:"Name a way couples celebrate a big milestone, like an engagement or anniversary.", answers:[{t:"A party",p:28},{t:"A trip",p:24},{t:"A special dinner",p:20},{t:"Gifts",p:16},{t:"Renewing vows or promises",p:12}]},
+    {q:"Name something a couple does to keep the romance alive over time.", answers:[{t:"Regular date nights",p:30},{t:"Surprise each other",p:24},{t:"Compliment each other",p:18},{t:"Try new things together",p:16},{t:"Never stop flirting",p:12}]},
+    {q:"Name a place that feels romantic at night.", answers:[{t:"Under the stars",p:30},{t:"A rooftop",p:24},{t:"By the beach",p:20},{t:"A candlelit room",p:15},{t:"A city skyline view",p:11}]},
+    {q:"Name something people do to show they're falling in love.", answers:[{t:"Can't stop thinking about them",p:30},{t:"Want to spend all their time with them",p:24},{t:"Get nervous around them",p:18},{t:"Introduce them to friends or family",p:16},{t:"Plan a future together",p:12}]},
+    {q:"Name a romantic thing to do on a rainy day.", answers:[{t:"Cuddle and watch movies",p:32},{t:"Read together",p:22},{t:"Cook together",p:20},{t:"Slow dance in the living room",p:15},{t:"Drink tea or coffee together",p:11}]},
+    {q:"Name something a couple might get matching of.", answers:[{t:"Tattoos",p:28},{t:"Bracelets or jewelry",p:26},{t:"Phone cases",p:18},{t:"Outfits",p:16},{t:"Mugs",p:12}]},
+    {q:"Name a way to say \"I love you\" in another language.", answers:[{t:"Je t'aime (French)",p:32},{t:"Te amo (Spanish)",p:26},{t:"Ti amo (Italian)",p:18},{t:"Ich liebe dich (German)",p:14},{t:"Aishiteru (Japanese)",p:10}]},
+    {q:"Name something people look forward to on their wedding day.", answers:[{t:"Saying \"I do\"",p:32},{t:"First dance",p:24},{t:"Seeing their partner in their outfit",p:18},{t:"The reception or party",p:15},{t:"The honeymoon",p:11}]},
+    {q:"Name a romantic quality someone might look for in \"the one.\"", answers:[{t:"Kindness",p:28},{t:"Loyalty",p:24},{t:"Sense of humor",p:18},{t:"Makes them feel safe",p:16},{t:"Supports them",p:14}]},
+    {q:"Name a sweet thing to do for a partner who's sick.", answers:[{t:"Make them soup",p:30},{t:"Bring medicine",p:24},{t:"Cuddle and take care of them",p:20},{t:"Watch movies with them",p:14},{t:"Just be there",p:12}]},
+    {q:"Name something couples like to do on a lazy Sunday together.", answers:[{t:"Sleep in",p:30},{t:"Cook breakfast together",p:24},{t:"Watch shows in bed",p:20},{t:"Go for a slow walk",p:14},{t:"Do nothing and just relax",p:12}]},
+    {q:"Name a way to make someone feel special on their birthday.", answers:[{t:"Plan a surprise party",p:28},{t:"Give a thoughtful gift",p:26},{t:"Write a heartfelt message",p:18},{t:"Take them somewhere special",p:16},{t:"Bake them a cake",p:12}]},
+    {q:"Name a classic romantic movie moment.", answers:[{t:"The kiss in the rain",p:30},{t:"Running to the airport",p:24},{t:"The declaration of love",p:20},{t:"The slow dance",p:15},{t:"The proposal",p:11}]},
+    {q:"Name something that makes a relationship feel like \"true love.\"", answers:[{t:"They accept you fully",p:30},{t:"They make you a better person",p:24},{t:"You can't imagine life without them",p:20},{t:"They support your dreams",p:15},{t:"You feel safe with them",p:11}]},
+    {q:"Name a way to describe a \"meet cute.\"", answers:[{t:"A chance encounter",p:30},{t:"An awkward first meeting",p:24},{t:"Bumping into each other",p:20},{t:"A mutual friend introduction",p:16},{t:"Locking eyes across the room",p:10}]},
+    {q:"Name something people do on a double date.", answers:[{t:"Go to dinner",p:28},{t:"Play games together",p:24},{t:"Go to a movie",p:20},{t:"Do an activity together",p:16},{t:"Compare relationship stories",p:12}]},
+    {q:"Name a romantic gift you could give for an anniversary.", answers:[{t:"Jewelry",p:30},{t:"A trip",p:24},{t:"A custom photo book",p:20},{t:"Flowers",p:15},{t:"A heartfelt letter",p:11}]},
+    {q:"Name a way couples show love through cooking.", answers:[{t:"Making their favorite meal",p:30},{t:"Baking something sweet",p:24},{t:"Cooking together",p:20},{t:"Recreating a memory meal",p:14},{t:"Trying a new recipe for them",p:12}]},
+    {q:"Name something that makes a couple \"relationship goals.\"", answers:[{t:"They always support each other",p:28},{t:"They still act like newlyweds",p:24},{t:"They communicate well",p:20},{t:"They travel together",p:16},{t:"They make each other laugh",p:12}]},
+    {q:"Name a way to plan a romantic surprise trip.", answers:[{t:"Book their favorite destination",p:28},{t:"Keep it a secret until the last moment",p:24},{t:"Pack for them",p:20},{t:"Plan every detail",p:16},{t:"Involve their friends or family",p:12}]},
+    {q:"Name something couples do to reminisce about their relationship.", answers:[{t:"Look at old photos",p:30},{t:"Watch old videos",p:24},{t:"Revisit where they met",p:20},{t:"Read old messages",p:14},{t:"Tell the story to others",p:12}]},
+    {q:"Name a way to show love through words.", answers:[{t:"Saying \"I love you\"",p:30},{t:"Complimenting them",p:24},{t:"Writing a poem or letter",p:20},{t:"Texting sweet things",p:14},{t:"Telling them you're proud of them",p:12}]},
+    {q:"Name something people do to make a partner feel prioritized.", answers:[{t:"Make time for them",p:30},{t:"Put the phone away",p:24},{t:"Remember important dates",p:20},{t:"Ask about their day",p:14},{t:"Show up for them",p:12}]},
+    {q:"Name a romantic thing to do for a partner's big day, like an interview or exam.", answers:[{t:"Send encouragement",p:30},{t:"Wish them luck",p:24},{t:"Send a small gift",p:20},{t:"Plan a celebration after",p:14},{t:"Check in on them",p:12}]},
+    {q:"Name something couples like to do to relive their first date.", answers:[{t:"Go back to the same place",p:32},{t:"Order the same food",p:24},{t:"Wear something similar",p:18},{t:"Talk about that day",p:16},{t:"Take a new photo there",p:10}]},
+    {q:"Name a romantic way to say good morning.", answers:[{t:"A sweet text",p:30},{t:"A phone call",p:24},{t:"Coffee in bed",p:20},{t:"A kiss",p:15},{t:"\"Good morning, beautiful/handsome\"",p:11}]},
+    {q:"Name something that makes a proposal memorable.", answers:[{t:"The location",p:28},{t:"A heartfelt speech",p:24},{t:"Involving family or friends",p:20},{t:"The ring",p:16},{t:"Capturing it on camera",p:12}]},
+    {q:"Name a way people show love through gestures instead of words.", answers:[{t:"Doing chores for them",p:28},{t:"Running errands for them",p:24},{t:"Cooking for them",p:20},{t:"Giving them space when needed",p:16},{t:"Small surprises",p:12}]},
+    {q:"Name something couples do to feel connected before bed.", answers:[{t:"A goodnight call",p:30},{t:"Saying \"I love you\"",p:24},{t:"Sending a sweet text",p:20},{t:"Talking about their day",p:14},{t:"Sending a goodnight photo",p:12}]},
+    {q:"Name a romantic thing about slow dancing.", answers:[{t:"Being close to each other",p:30},{t:"No words are needed",p:24},{t:"It feels intimate",p:20},{t:"It's timeless",p:15},{t:"It's a simple, quiet moment",p:11}]},
+    {q:"Name something a couple might do for a \"just because\" gift.", answers:[{t:"Their favorite snack",p:28},{t:"Flowers",p:24},{t:"A small trinket",p:20},{t:"A handwritten note",p:16},{t:"Something that reminded you of them",p:12}]},
+    {q:"Name a way people flirt while getting to know someone.", answers:[{t:"Compliments",p:28},{t:"Playful teasing",p:24},{t:"Long conversations",p:20},{t:"Eye contact",p:16},{t:"Asking deep questions",p:12}]},
+    {q:"Name a romantic quality of a long-distance reunion.", answers:[{t:"The anticipation",p:30},{t:"The big hug",p:26},{t:"Making up for lost time",p:18},{t:"Not wanting to say goodbye again",p:16},{t:"Feeling complete again",p:10}]},
+    {q:"Name something that makes a relationship feel like a fairytale.", answers:[{t:"A grand gesture",p:28},{t:"Feeling swept off your feet",p:24},{t:"An unexpected love story",p:20},{t:"A \"meant to be\" feeling",p:16},{t:"A happy ending",p:12}]},
+    {q:"Name a place people like to take engagement or couple photos.", answers:[{t:"The beach",p:28},{t:"A park",p:24},{t:"Downtown / city streets",p:20},{t:"Where they met",p:16},{t:"A scenic overlook",p:12}]},
+    {q:"Name something couples say to comfort each other.", answers:[{t:"I'm here for you",p:30},{t:"It's going to be okay",p:24},{t:"I love you",p:20},{t:"We'll get through this together",p:14},{t:"I'm proud of you",p:12}]},
+    {q:"Name a romantic thing you'd do for a partner's birthday from far away.", answers:[{t:"Send a gift",p:30},{t:"Plan a surprise visit",p:24},{t:"Have flowers delivered",p:20},{t:"Plan a virtual celebration",p:14},{t:"Write a heartfelt letter",p:12}]},
+    {q:"Name something couples do to keep long-distance romance exciting.", answers:[{t:"Plan surprise visits",p:28},{t:"Send care packages",p:24},{t:"Write love letters",p:20},{t:"Plan virtual date nights",p:16},{t:"Send flirty messages",p:12}]},
+    {q:"Name a romantic movie genre couples enjoy watching together.", answers:[{t:"Romantic comedy",p:30},{t:"Drama",p:24},{t:"Romance",p:20},{t:"Musical",p:15},{t:"Classic love story",p:11}]},
+    {q:"Name something that makes a long-distance relationship romantic despite the distance.", answers:[{t:"Handwritten letters",p:28},{t:"Surprise visits",p:24},{t:"Virtual date nights",p:20},{t:"Care packages",p:16},{t:"Late-night calls",p:12}]},
+    {q:"Name a way a couple might celebrate the anniversary of the day they met.", answers:[{t:"Recreate the day",p:30},{t:"Share the story with others",p:24},{t:"A special dinner",p:20},{t:"Reflect on how far they've come",p:14},{t:"Exchange gifts",p:12}]},
+    {q:"Name something you'd do to plan a romantic picnic.", answers:[{t:"Pack their favorite foods",p:28},{t:"Find a scenic spot",p:24},{t:"Bring a blanket",p:20},{t:"Bring flowers",p:16},{t:"Play soft music",p:12}]},
+    {q:"Name a way to say \"I miss you\" romantically.", answers:[{t:"Every day feels longer without you",p:28},{t:"Can't wait to hold you again",p:24},{t:"You're always on my mind",p:20},{t:"Sending a heartfelt message",p:16},{t:"A love song dedication",p:12}]},
+    {q:"Name something a couple might do for a \"stay at home\" date night.", answers:[{t:"Cook a fancy dinner",p:28},{t:"Watch a movie",p:24},{t:"Play games",p:20},{t:"Have a candlelit dinner",p:16},{t:"Dance in the living room",p:12}]},
+    {q:"Name something romantic about writing letters instead of texting.", answers:[{t:"It feels more thoughtful",p:30},{t:"You can reread them",p:24},{t:"It shows effort",p:18},{t:"It's a keepsake",p:16},{t:"It feels old-fashioned and sweet",p:12}]},
+    {q:"Name a way couples show love through actions, not words.", answers:[{t:"Helping with tasks",p:28},{t:"Showing up when needed",p:24},{t:"Small daily gestures",p:20},{t:"Sacrificing for them",p:16},{t:"Remembering the little things",p:12}]},
+    {q:"Name something that makes long-distance couples' first in-person meeting special.", answers:[{t:"The nervous excitement",p:28},{t:"Finally being able to hug",p:26},{t:"It feels surreal",p:18},{t:"Everything feels natural",p:16},{t:"It's a huge relief",p:12}]},
+    {q:"Name a romantic thing to whisper before falling asleep together.", answers:[{t:"I love you",p:30},{t:"Goodnight, my love",p:24},{t:"I'm so glad you're here",p:18},{t:"Sweet dreams",p:16},{t:"I'm the luckiest",p:12}]},
+    {q:"Name something couples like to do to plan their future home together.", answers:[{t:"Look at houses online",p:28},{t:"Talk about where to live",p:24},{t:"Save money together",p:20},{t:"Make Pinterest boards for decor",p:16},{t:"Discuss must-haves",p:12}]},
+    {q:"Name a romantic thing about a long walk together.", answers:[{t:"Deep conversations",p:28},{t:"Holding hands",p:26},{t:"Enjoying the scenery",p:18},{t:"Quiet, quality time",p:16},{t:"No distractions",p:12}]},
+    {q:"Name something people do to keep the \"honeymoon phase\" feeling alive.", answers:[{t:"Keep dating each other",p:28},{t:"Surprise each other",p:24},{t:"Keep flirting",p:20},{t:"Try new experiences together",p:16},{t:"Never stop complimenting each other",p:12}]},
+    {q:"Name a romantic gesture that requires no money.", answers:[{t:"A love letter",p:28},{t:"A homemade meal",p:24},{t:"A long hug",p:20},{t:"Quality time",p:16},{t:"Words of affirmation",p:12}]},
+    {q:"Name something couples do for a candlelit dinner at home.", answers:[{t:"Dim the lights",p:28},{t:"Play soft music",p:24},{t:"Dress up",p:20},{t:"Cook a special meal",p:16},{t:"Use their best dishes",p:12}]},
+    {q:"Name a way to make a long-distance goodbye less painful.", answers:[{t:"Plan the next visit immediately",p:30},{t:"A long hug before leaving",p:24},{t:"Reminding each other it's temporary",p:18},{t:"A tearful but hopeful goodbye",p:16},{t:"Promising to call right after",p:12}]},
+    {q:"Name something a couple does that shows they're \"soulmates.\"", answers:[{t:"They finish each other's sentences",p:28},{t:"They just \"get\" each other",p:26},{t:"They never run out of things to talk about",p:18},{t:"Everything feels easy",p:16},{t:"They feel like home to each other",p:12}]},
+    {q:"Name a romantic quality of a handwritten love note.", answers:[{t:"It's personal",p:30},{t:"It's a keepsake",p:24},{t:"It takes time and effort",p:18},{t:"It feels sincere",p:16},{t:"You can reread it anytime",p:12}]},
+    {q:"Name something couples do to make a long car ride romantic.", answers:[{t:"Play their favorite songs",p:28},{t:"Hold hands while driving",p:24},{t:"Talk about life",p:20},{t:"Sing together",p:16},{t:"Stop for a scenic view",p:12}]},
+    {q:"Name a way to describe the feeling of falling in love.", answers:[{t:"Butterflies",p:30},{t:"Feeling like you're on cloud nine",p:24},{t:"Can't stop smiling",p:20},{t:"Excited and nervous",p:14},{t:"Feeling complete",p:12}]},
+    {q:"Name something a couple might do for a \"no phones\" date night.", answers:[{t:"Have deep conversations",p:30},{t:"Play a board game",p:24},{t:"Cook together",p:20},{t:"Go for a walk",p:14},{t:"Just enjoy each other's company",p:12}]},
+    {q:"Name a romantic quality of slow, quiet mornings together.", answers:[{t:"Cuddling in bed",p:30},{t:"Making breakfast together",p:24},{t:"No rush to start the day",p:18},{t:"Talking softly",p:16},{t:"Coffee together",p:12}]},
+    {q:"Name something couples say to express deep love.", answers:[{t:"You're my everything",p:30},{t:"I can't live without you",p:24},{t:"You complete me",p:18},{t:"You're my soulmate",p:16},{t:"Forever isn't long enough with you",p:12}]},
+    {q:"Name a romantic destination for a honeymoon.", answers:[{t:"Bora Bora",p:28},{t:"Paris",p:26},{t:"The Maldives",p:18},{t:"Italy",p:16},{t:"Hawaii",p:12}]},
+    {q:"Name something a couple does to celebrate \"just being together,\" with no special occasion.", answers:[{t:"A spontaneous date",p:30},{t:"Cooking a nice meal",p:24},{t:"A relaxing evening in",p:20},{t:"Taking a walk together",p:14},{t:"Just talking and laughing",p:12}]},
+    {q:"Name a romantic thing about long-distance couples finally living together.", answers:[{t:"No more goodbyes",p:32},{t:"Waking up together every day",p:26},{t:"Sharing daily life",p:18},{t:"Building a home together",p:14},{t:"Never having to schedule calls again",p:10}]},
+    {q:"Name something you'd do to make a partner feel loved every day.", answers:[{t:"Say \"I love you\" often",p:30},{t:"Small daily gestures",p:24},{t:"Listen to them",p:18},{t:"Compliment them",p:16},{t:"Show appreciation",p:12}]},
+    {q:"Name a romantic thing about star-gazing together.", answers:[{t:"It's peaceful",p:28},{t:"You can talk for hours",p:24},{t:"It feels intimate",p:20},{t:"It's free and simple",p:16},{t:"It feels magical",p:12}]},
+    {q:"Name something couples do to plan a romantic anniversary trip.", answers:[{t:"Pick a meaningful destination",p:28},{t:"Book something special",p:24},{t:"Recreate their first date",p:20},{t:"Keep it a surprise",p:16},{t:"Plan activities together",p:12}]},
+    {q:"Name a way people show they're \"smitten\" with someone.", answers:[{t:"They can't stop smiling",p:28},{t:"They talk about them nonstop",p:24},{t:"They get nervous around them",p:20},{t:"They prioritize seeing them",p:16},{t:"They act differently around them",p:12}]},
+    {q:"Name something romantic about a couple's shared playlist.", answers:[{t:"Songs that remind them of each other",p:30},{t:"Songs from special moments",p:24},{t:"\"Their song\"",p:20},{t:"Songs they discovered together",p:14},{t:"A playlist for missing each other",p:12}]},
+    {q:"Name a romantic thing to do for a \"just moved in together\" milestone.", answers:[{t:"Decorate together",p:28},{t:"Have a housewarming date night",p:24},{t:"Cook their first meal together",p:20},{t:"Take a photo of the new place",p:16},{t:"Celebrate with friends or family",p:12}]},
+    {q:"Name something a partner does that makes you feel truly cherished.", answers:[{t:"Remembering small details",p:28},{t:"Prioritizing your feelings",p:24},{t:"Standing up for you",p:20},{t:"Celebrating your wins",p:16},{t:"Being your biggest supporter",p:12}]},
+    {q:"Name a romantic activity for a couple's staycation.", answers:[{t:"Room service or breakfast in bed",p:28},{t:"A spa day together",p:24},{t:"Watching movies all day",p:20},{t:"Trying a new restaurant",p:16},{t:"Just relaxing together",p:12}]},
+    {q:"Name something that makes long-distance love stories special.", answers:[{t:"Overcoming the distance",p:30},{t:"Proving love can wait",p:24},{t:"The reunion moments",p:18},{t:"Growing stronger through it",p:16},{t:"A love that survived the odds",p:12}]},
+    {q:"Name a romantic way to describe \"home.\"", answers:[{t:"Wherever they are",p:32},{t:"A feeling, not a place",p:26},{t:"Where you feel safe",p:18},{t:"Where you're loved",p:14},{t:"Being in their arms",p:10}]}
+  ]},
+  { key:"flirty", name:"Hot & Flirty", flirty:true, questions:[
+    {q:"Name something that makes a first kiss memorable.", answers:[{t:"Perfect timing",p:28},{t:"The nervous butterflies",p:24},{t:"Where it happens",p:20},{t:"How it's initiated",p:16},{t:"The chemistry",p:12}]},
+    {q:"Name a feature someone might compliment on a date.", answers:[{t:"Eyes",p:30},{t:"Smile",p:26},{t:"Hands",p:18},{t:"Lips",p:14},{t:"Hair",p:12}]},
+    {q:"What's a flirty text you might send your partner?", answers:[{t:"Miss you",p:30},{t:"Thinking about you",p:25},{t:"Can't wait to see you",p:20},{t:"A wink emoji",p:15},{t:"You looked amazing today",p:10}]},
+    {q:"Name something you might whisper in your partner's ear.", answers:[{t:"I love you",p:32},{t:"You look amazing",p:24},{t:"Something funny",p:18},{t:"A secret",p:15},{t:"Come here",p:11}]},
+    {q:"Name a spot people love getting kissed.", answers:[{t:"Neck",p:34},{t:"Lips",p:26},{t:"Forehead",p:18},{t:"Cheek",p:13},{t:"Hand",p:9}]},
+    {q:"Name something that instantly makes a partner more attractive.", answers:[{t:"Confidence",p:30},{t:"Sense of humor",p:24},{t:"Kindness",p:18},{t:"How they dress",p:16},{t:"Their smile",p:12}]},
+    {q:"What's a flirty way to break the ice?", answers:[{t:"A genuine compliment",p:32},{t:"A playful tease",p:24},{t:"\"Come here often?\"",p:18},{t:"A playful dare",p:15},{t:"A wink",p:11}]},
+    {q:"Name something couples do to build anticipation before a date night.", answers:[{t:"Flirty texting all day",p:30},{t:"Getting dressed up",p:26},{t:"Planning a surprise",p:20},{t:"Sending a teaser photo",p:14},{t:"Counting down the hours",p:10}]},
+    {q:"Name an item of clothing someone might call \"irresistible.\"", answers:[{t:"Little black dress",p:28},{t:"A nice suit",p:24},{t:"Lingerie",p:20},{t:"Tight jeans",p:16},{t:"A well-fitted shirt",p:12}]},
+    {q:"Name a way to tease your partner over a video call.", answers:[{t:"A flirty compliment",p:30},{t:"Blowing a kiss",p:24},{t:"A wink",p:20},{t:"Showing off an outfit",p:15},{t:"Playful teasing",p:11}]},
+    {q:"What's something people do to set the mood for a romantic night?", answers:[{t:"Dim the lights",p:28},{t:"Light candles",p:24},{t:"Put on music",p:22},{t:"Order their favorite food or wine",p:16},{t:"Wear something special",p:10}]},
+    {q:"Name something that makes long-distance couples miss each other more.", answers:[{t:"A flirty voice message",p:28},{t:"A cute selfie",p:24},{t:"A love song",p:20},{t:"A sweet good morning text",p:16},{t:"The video call ending",p:12}]},
+    {q:"Name something people do to look extra good before a date.", answers:[{t:"Get dressed up",p:30},{t:"Do their hair",p:24},{t:"Wear their best perfume or cologne",p:20},{t:"Practice their smile in the mirror",p:15},{t:"Pick out the \"right\" outfit",p:11}]},
+    {q:"Name a flirty compliment you might give your partner.", answers:[{t:"You look amazing",p:30},{t:"You're so cute",p:24},{t:"I can't stop thinking about you",p:20},{t:"You have a great smile",p:15},{t:"You're irresistible",p:11}]},
+    {q:"Name something couples do to keep the spark alive.", answers:[{t:"Flirt often",p:30},{t:"Surprise each other",p:24},{t:"Compliment each other",p:20},{t:"Plan date nights",p:15},{t:"Keep things playful",p:11}]},
+    {q:"Name a flirty nickname a partner might use.", answers:[{t:"Babe",p:28},{t:"Hot stuff",p:24},{t:"Sexy",p:20},{t:"Cutie",p:16},{t:"Love",p:12}]},
+    {q:"Name something that makes video calls feel more intimate.", answers:[{t:"Dim lighting",p:28},{t:"Getting cozy",p:24},{t:"Talking softly",p:20},{t:"Wearing something cute",p:16},{t:"Staying up late talking",p:12}]},
+    {q:"Name a way partners playfully tease each other.", answers:[{t:"Nicknames",p:28},{t:"Inside jokes",p:24},{t:"Playful dares",p:20},{t:"Compliments with a wink",p:16},{t:"Playful arguments",p:12}]},
+    {q:"Name something people do to feel confident on a date.", answers:[{t:"Wear their favorite outfit",p:30},{t:"Give themselves a pep talk",p:22},{t:"Practice what to say",p:20},{t:"Do their hair or makeup",p:16},{t:"Remind themselves of their best qualities",p:12}]},
+    {q:"Name a flirty way to say goodnight.", answers:[{t:"Sweet dreams",p:30},{t:"Wish you were here",p:24},{t:"Can't wait to see you again",p:20},{t:"A blown kiss",p:15},{t:"Dream about me",p:11}]},
+    {q:"Name something that makes a couple's chemistry obvious to others.", answers:[{t:"The way they look at each other",p:30},{t:"Constant teasing or flirting",p:24},{t:"Always touching or close together",p:20},{t:"Inside jokes",p:15},{t:"Can't stop smiling around each other",p:11}]},
+    {q:"Name a flirty thing to do while cooking together.", answers:[{t:"Feed each other bites",p:28},{t:"Dance in the kitchen",p:24},{t:"Tease each other",p:20},{t:"Steal a kiss",p:16},{t:"Compliment the \"chef\"",p:12}]},
+    {q:"Name something people wear to feel more confident or attractive.", answers:[{t:"Their favorite outfit",p:28},{t:"Nice perfume or cologne",p:24},{t:"Red lipstick",p:20},{t:"A little black dress or nice suit",p:16},{t:"Their best shoes",p:12}]},
+    {q:"Name a flirty way to start a phone call.", answers:[{t:"Hey gorgeous",p:30},{t:"I was just thinking about you",p:24},{t:"Miss me?",p:20},{t:"A playful laugh",p:15},{t:"Guess what I'm wearing",p:11}]},
+    {q:"Name something that builds tension before a first kiss.", answers:[{t:"Prolonged eye contact",p:30},{t:"Standing close",p:24},{t:"Nervous laughter",p:18},{t:"A pause in conversation",p:16},{t:"Leaning in slowly",p:12}]},
+    {q:"Name a flirty thing to write in a text.", answers:[{t:"A wink emoji",p:28},{t:"Can't wait to see you",p:24},{t:"A playful tease",p:20},{t:"You looked so good today",p:16},{t:"A flirty compliment",p:12}]},
+    {q:"Name something a couple might do to make date night feel extra special.", answers:[{t:"Dress up nicer than usual",p:28},{t:"Pick a fancy restaurant",p:24},{t:"Plan a surprise",p:20},{t:"Set a romantic mood at home",p:16},{t:"Try something new together",p:12}]},
+    {q:"Name a way to flirt without saying a word.", answers:[{t:"A wink",p:30},{t:"A smile",p:26},{t:"Eye contact",p:18},{t:"A playful touch",p:15},{t:"Biting your lip",p:11}]},
+    {q:"Name something people find attractive in how someone talks.", answers:[{t:"Their confidence",p:28},{t:"Their sense of humor",p:24},{t:"Their voice or tone",p:20},{t:"How they listen",p:16},{t:"Their choice of words",p:12}]},
+    {q:"Name a playful bet couples might make.", answers:[{t:"Who does the dishes",p:28},{t:"Who's right about something",p:24},{t:"A dare",p:20},{t:"Who wins a game",p:16},{t:"Loser buys dinner",p:12}]},
+    {q:"Name a way partners show affection in public.", answers:[{t:"Holding hands",p:30},{t:"A kiss on the cheek",p:24},{t:"An arm around the waist",p:20},{t:"Whispering something sweet",p:15},{t:"A loving glance",p:11}]},
+    {q:"Name something that makes a long-distance video call feel romantic.", answers:[{t:"Candlelight in the background",p:26},{t:"Wearing something nice for them",p:24},{t:"Playing music together",p:20},{t:"A glass of wine each",p:18},{t:"Staying on the call until you fall asleep",p:12}]},
+    {q:"Name a flirty game couples might play.", answers:[{t:"Truth or dare",p:30},{t:"20 questions",p:22},{t:"Never have I ever",p:20},{t:"A card game with a twist",p:16},{t:"Guess the answer",p:12}]},
+    {q:"Name something someone does when they have a crush.", answers:[{t:"Overthink texts",p:28},{t:"Get nervous around them",p:24},{t:"Try to look their best",p:20},{t:"Talk about them to friends",p:16},{t:"Smile a lot more",p:12}]},
+    {q:"Name a compliment about someone's style that feels flirty.", answers:[{t:"You wear that so well",p:30},{t:"That color looks amazing on you",p:24},{t:"You always look so put together",p:20},{t:"That outfit is doing a lot",p:15},{t:"You clean up nice",p:11}]},
+    {q:"Name something that makes long-distance couples excited for a visit.", answers:[{t:"Counting down the days",p:28},{t:"Planning what to wear",p:26},{t:"Planning a special reunion moment",p:20},{t:"Getting the room or place ready",p:14},{t:"Buying a special outfit",p:12}]},
+    {q:"Name a flirty way to ask someone out.", answers:[{t:"Can I take you to dinner?",p:30},{t:"Are you free this weekend?",p:24},{t:"I'd love to spend more time with you",p:20},{t:"A cute, direct text",p:15},{t:"Let's finally do that date",p:11}]},
+    {q:"Name something a partner does that's considered \"smooth.\"", answers:[{t:"A confident compliment",p:28},{t:"Opening the door",p:24},{t:"Making eye contact and smiling",p:20},{t:"Being a good listener",p:16},{t:"A well-timed joke",p:12}]},
+    {q:"Name a nickname that hints at how attractive someone is.", answers:[{t:"Hot stuff",p:28},{t:"Gorgeous",p:26},{t:"Handsome",p:18},{t:"Beautiful",p:16},{t:"Stunner",p:12}]},
+    {q:"Name something that makes reuniting after time apart feel electric.", answers:[{t:"A long hug",p:30},{t:"A big kiss",p:26},{t:"Butterflies in your stomach",p:18},{t:"Not wanting to let go",p:15},{t:"Making up for lost time",p:11}]},
+    {q:"Name a flirty thing to do when you first see your partner after time apart.", answers:[{t:"Run and hug them",p:28},{t:"Kiss them immediately",p:26},{t:"Twirl them around",p:18},{t:"Whisper something sweet",p:16},{t:"Just stare at them smiling",p:12}]},
+    {q:"Name something people do to feel more desirable before a date.", answers:[{t:"Work out",p:26},{t:"Get a new outfit",p:24},{t:"Do their hair or makeup",p:22},{t:"Practice confidence",p:16},{t:"Treat themselves to self-care",p:12}]},
+    {q:"Name a flirty thing to say when picking out an outfit together.", answers:[{t:"Wear that one, it's my favorite",p:30},{t:"You'd look good in anything",p:24},{t:"Save that for our date",p:20},{t:"That's definitely the one",p:15},{t:"I can't wait to see you in that",p:11}]},
+    {q:"Name something a couple might do to make a slow dance flirty.", answers:[{t:"Whisper in each other's ear",p:30},{t:"Get very close",p:26},{t:"Lock eyes",p:18},{t:"A slow kiss",p:16},{t:"Sway to the music together",p:10}]},
+    {q:"Name a flirty way to greet your partner on video call.", answers:[{t:"Blow a kiss",p:30},{t:"Wink at the camera",p:24},{t:"\"Well hello there\"",p:20},{t:"A big smile",p:15},{t:"\"Look who it is\"",p:11}]},
+    {q:"Name something someone might do to make a partner blush.", answers:[{t:"Give a bold compliment",p:28},{t:"Say something suggestive",p:24},{t:"Stare lovingly",p:20},{t:"Whisper something sweet",p:16},{t:"Tease them playfully",p:12}]},
+    {q:"Name something couples enjoy about a candlelit bath date.", answers:[{t:"Setting the mood",p:28},{t:"Music and candles",p:26},{t:"Wine or champagne",p:20},{t:"Rose petals",p:15},{t:"Relaxing together",p:11}]},
+    {q:"Name something that makes long-distance couples' calls feel flirty.", answers:[{t:"Late-night talks",p:28},{t:"Whispering sweet nothings",p:24},{t:"Playful teasing",p:20},{t:"Getting a little vulnerable",p:16},{t:"Talking about missing each other",p:12}]},
+    {q:"Name a flirty pet name for someone you're crazy about.", answers:[{t:"Baby",p:28},{t:"Boo",p:24},{t:"Honey",p:20},{t:"Sweetheart",p:16},{t:"Angel",p:12}]},
+    {q:"Name something a partner does that's undeniably charming.", answers:[{t:"A genuine laugh",p:28},{t:"Confidence without arrogance",p:24},{t:"Kindness to others",p:20},{t:"A great sense of humor",p:16},{t:"Remembering the little things",p:12}]},
+    {q:"Name a flirty thing to do at a bar or restaurant on a date.", answers:[{t:"Share a dessert",p:28},{t:"Order for each other",p:24},{t:"Play footsie",p:20},{t:"Lean in close",p:16},{t:"Toast to the night",p:12}]},
+    {q:"Name something that makes a slow burn romance exciting.", answers:[{t:"The tension",p:30},{t:"The anticipation",p:24},{t:"Small moments of chemistry",p:18},{t:"The wait finally paying off",p:16},{t:"Getting to know each other deeply first",p:12}]},
+    {q:"Name a flirty compliment about someone's personality.", answers:[{t:"You're so funny",p:28},{t:"I love how confident you are",p:24},{t:"You make me laugh so hard",p:20},{t:"You're so easy to talk to",p:16},{t:"You're the whole package",p:12}]},
+    {q:"Name something that makes a couple's playful arguments kind of flirty.", answers:[{t:"The teasing tone",p:28},{t:"Ending in laughter",p:26},{t:"Making up afterward",p:18},{t:"The banter",p:16},{t:"Neither really being mad",p:12}]},
+    {q:"Name a flirty way to end a text conversation.", answers:[{t:"A wink emoji",p:28},{t:"Can't wait to see you",p:24},{t:"Miss you already",p:20},{t:"A heart emoji",p:16},{t:"Talk soon, cutie",p:12}]},
+    {q:"Name something that makes a long-distance couple's video-call date night feel special.", answers:[{t:"Dressing up for it",p:28},{t:"Cooking the same meal",p:24},{t:"Playing music",p:20},{t:"Lighting candles on both ends",p:16},{t:"Staying up talking for hours",p:12}]},
+    {q:"Name a flirty thing to do when saying goodbye after a date.", answers:[{t:"A lingering hug",p:28},{t:"A kiss goodnight",p:26},{t:"I really don't want to leave",p:18},{t:"Making plans for next time",p:16},{t:"A playful wink walking away",p:12}]},
+    {q:"Name something that makes eye contact feel flirty.", answers:[{t:"Holding it a little too long",p:30},{t:"A smile while staring",p:24},{t:"A slow, knowing look",p:18},{t:"Looking away and then back",p:16},{t:"A wink",p:12}]},
+    {q:"Name a flirty nickname based on someone's looks.", answers:[{t:"Gorgeous",p:28},{t:"Handsome",p:26},{t:"Beautiful",p:18},{t:"Cutie",p:16},{t:"Stunner",p:12}]},
+    {q:"Name something people do to be \"smooth\" when texting a crush.", answers:[{t:"Send a well-timed compliment",p:28},{t:"Use a witty comeback",p:24},{t:"Wait a bit before replying",p:20},{t:"Keep the conversation going",p:16},{t:"Use a flirty emoji",p:12}]},
+    {q:"Name a flirty thing to say to make someone feel wanted.", answers:[{t:"I can't stop thinking about you",p:30},{t:"You're all I want",p:24},{t:"I need you here",p:20},{t:"You're irresistible",p:15},{t:"I'm obsessed with you",p:11}]},
+    {q:"Name something a couple does to keep flirting fun after years together.", answers:[{t:"Compliment each other daily",p:28},{t:"Send flirty texts randomly",p:24},{t:"Keep dating each other",p:20},{t:"Playful teasing",p:16},{t:"Never stop complimenting looks",p:12}]},
+    {q:"Name a flirty thing about slow morning cuddles.", answers:[{t:"Being close, half-asleep",p:28},{t:"Whispering good morning",p:24},{t:"Not wanting to get up",p:20},{t:"Sweet kisses",p:16},{t:"Just enjoying the quiet",p:12}]},
+    {q:"Name something that makes a wink flirty instead of just funny.", answers:[{t:"The context",p:28},{t:"The confidence behind it",p:24},{t:"A slow, deliberate wink",p:20},{t:"Paired with a smile",p:16},{t:"Perfect timing",p:12}]},
+    {q:"Name a flirty way to compliment someone's cooking.", answers:[{t:"You'd make a great partner in the kitchen",p:28},{t:"This is almost as good as you",p:24},{t:"Marry me",p:20},{t:"You're spoiling me",p:16},{t:"I could get used to this",p:12}]},
+    {q:"Name something people do to flirt using body language.", answers:[{t:"Leaning in",p:28},{t:"Playing with their hair",p:24},{t:"Mirroring movements",p:20},{t:"Standing close",p:16},{t:"Prolonged eye contact",p:12}]},
+    {q:"Name a flirty thing about a partner's laugh.", answers:[{t:"It's contagious",p:30},{t:"It lights up their whole face",p:24},{t:"You'd do anything to hear it again",p:18},{t:"It's your favorite sound",p:16},{t:"It makes you fall for them more",p:12}]},
+    {q:"Name something that makes a \"good morning\" text flirty.", answers:[{t:"Thinking of you already",p:28},{t:"Dreamt about you",p:24},{t:"Wish you were next to me",p:20},{t:"A cute nickname",p:16},{t:"A kissy emoji",p:12}]},
+    {q:"Name something flirty about getting ready for a date together, in person or on call.", answers:[{t:"Asking their opinion on outfits",p:28},{t:"Getting compliments while getting ready",p:24},{t:"Doing it on video call for fun",p:20},{t:"The anticipation building",p:16},{t:"Teasing about looking too good",p:12}]},
+    {q:"Name something that makes long-distance flirting feel more intense.", answers:[{t:"The anticipation of seeing them",p:30},{t:"Not being able to touch, only imagine",p:24},{t:"Late-night deep talks",p:18},{t:"Sending your best photos",p:16},{t:"Counting down to their visit",p:12}]},
+    {q:"Name a flirty way to react to a partner's selfie.", answers:[{t:"Stop being so cute",p:28},{t:"A fire emoji",p:24},{t:"How are you real",p:20},{t:"Marry me",p:16},{t:"You're killing me",p:12}]},
+    {q:"Name something a partner does that makes you weak in the knees.", answers:[{t:"A certain smile",p:28},{t:"Their voice",p:24},{t:"The way they look at you",p:20},{t:"A compliment out of nowhere",p:16},{t:"Their confidence",p:12}]},
+    {q:"Name a flirty thing about holding hands in public.", answers:[{t:"It feels intimate",p:28},{t:"It shows you're a couple",p:26},{t:"Little squeezes mean something",p:18},{t:"It's simple but sweet",p:16},{t:"Playing with their fingers",p:12}]},
+    {q:"Name something that makes slow, teasing texting fun.", answers:[{t:"The anticipation",p:30},{t:"Leaving them wanting more",p:24},{t:"Playful hints",p:18},{t:"A little mystery",p:16},{t:"Building excitement for later",p:12}]},
+    {q:"Name a flirty thing to whisper before a goodbye kiss.", answers:[{t:"I'll be thinking about this",p:28},{t:"Come back soon",p:24},{t:"That wasn't enough",p:20},{t:"One more",p:16},{t:"I already miss you",p:12}]},
+    {q:"Name something that makes running errands together in person a little flirty.", answers:[{t:"Playful teasing in the aisles",p:28},{t:"Sneaking kisses",p:24},{t:"Holding hands the whole time",p:20},{t:"Racing carts",p:16},{t:"Buying each other's favorite snacks",p:12}]},
+    {q:"Name a flirty compliment about someone's confidence.", answers:[{t:"You walk into a room like you own it",p:28},{t:"I love how sure of yourself you are",p:24},{t:"That confidence is so attractive",p:20},{t:"You make it look easy",p:16},{t:"That's hot",p:12}]},
+    {q:"Name something that makes a couple's \"our song\" moment flirty.", answers:[{t:"Dancing close to it",p:28},{t:"Singing it to each other",p:24},{t:"Remembering when it played",p:20},{t:"Sharing a look when it comes on",p:16},{t:"Making it a tradition",p:12}]},
+    {q:"Name a flirty thing about a candlelit dinner date.", answers:[{t:"The lighting sets the mood",p:28},{t:"Sitting close together",p:24},{t:"Sharing a dessert",p:20},{t:"Toasting to each other",p:16},{t:"Lingering after the check comes",p:12}]},
+    {q:"Name something people do to build romantic tension in a long-distance relationship.", answers:[{t:"Flirty texting all day",p:28},{t:"Talking about the next visit",p:24},{t:"Sending teaser photos",p:20},{t:"Voice notes late at night",p:16},{t:"Playful, suggestive banter",p:12}]},
+    {q:"Name a flirty way to say you're excited to see your partner.", answers:[{t:"I can't wait to hold you",p:30},{t:"Counting down the hours",p:24},{t:"I've missed this face",p:18},{t:"Come here already",p:16},{t:"I'm not letting go this time",p:12}]},
+    {q:"Name something that makes slow dancing at home flirty.", answers:[{t:"No one else around",p:28},{t:"Close, quiet moment",p:26},{t:"Soft music",p:18},{t:"Whispered words",p:16},{t:"A lingering kiss after",p:12}]},
+    {q:"Name a flirty thing about wearing your partner's clothes.", answers:[{t:"It smells like them",p:28},{t:"It feels comforting",p:24},{t:"They think it's cute",p:20},{t:"It's oddly attractive to them",p:16},{t:"It becomes a \"thing\"",p:12}]},
+    {q:"Name something a partner might say to flirt while cooking together.", answers:[{t:"Taste this",p:28},{t:"You're supervising, not helping",p:24},{t:"Kiss the cook",p:20},{t:"I could get used to this",p:16},{t:"This is a date, right?",p:12}]},
+    {q:"Name a flirty thing about a shared blanket on a cold night.", answers:[{t:"Getting closer for warmth",p:30},{t:"Cuddling under it",p:24},{t:"An excuse to be close",p:18},{t:"Sharing body heat",p:16},{t:"A cozy, intimate moment",p:12}]},
+    {q:"Name something that makes teasing about missing someone flirty.", answers:[{t:"I bet you miss me more",p:28},{t:"Playful competition over who misses who more",p:26},{t:"Prove it",p:18},{t:"Sending proof via cute photos",p:16},{t:"Making it a running joke",p:12}]},
+    {q:"Name a flirty way to react when your partner surprises you.", answers:[{t:"A big kiss",p:28},{t:"You're too good to me",p:24},{t:"Jumping into their arms",p:20},{t:"Happy tears and a kiss",p:16},{t:"Marry me right now",p:12}]},
+    {q:"Name something that makes a couple's playlist \"makeout music.\"", answers:[{t:"Slow R&B",p:28},{t:"Soft, romantic songs",p:24},{t:"Songs with a certain mood",p:20},{t:"Their favorite slow jam",p:16},{t:"Whatever's playing when they kiss",p:12}]},
+    {q:"Name a flirty thing about a partner's perfume or cologne.", answers:[{t:"It's memorable",p:28},{t:"It makes you want to be closer",p:26},{t:"It lingers on your clothes",p:18},{t:"You associate it with them",p:16},{t:"It's part of what you love about them",p:12}]},
+    {q:"Name something a couple does that's a little \"extra\" flirty for their anniversary.", answers:[{t:"A romantic getaway",p:28},{t:"Dressing to impress",p:24},{t:"A candlelit dinner at home",p:20},{t:"A love letter with a twist",p:16},{t:"Recreating their first kiss",p:12}]},
+    {q:"Name a flirty compliment about someone's eyes.", answers:[{t:"I could get lost in them",p:30},{t:"They're my favorite color",p:24},{t:"You have the most beautiful eyes",p:18},{t:"I love how they light up",p:16},{t:"They say everything",p:12}]},
+    {q:"Name something that makes a long-distance \"good morning\" video feel intimate.", answers:[{t:"Just waking up, no filter",p:28},{t:"Talking softly, half-asleep",p:24},{t:"Bedhead and all",p:20},{t:"Saying \"I wish you were here\"",p:16},{t:"Sending it before anything else",p:12}]},
+    {q:"Name a flirty thing a couple does at a party together.", answers:[{t:"Sneaking glances across the room",p:28},{t:"Finding excuses to touch",p:24},{t:"Whispering to each other",p:20},{t:"Leaving early together",p:16},{t:"Dancing close",p:12}]},
+    {q:"Name something that makes teasing over a text thread flirty instead of annoying.", answers:[{t:"The playful tone",p:28},{t:"Knowing it's all in fun",p:26},{t:"Ending with something sweet",p:18},{t:"A wink emoji to soften it",p:16},{t:"Doing it because you like them",p:12}]},
+    {q:"Name a flirty thing about matching pajamas, even on video call.", answers:[{t:"It feels cute and coupley",p:28},{t:"It's a fun little tradition",p:24},{t:"Showing it off on call",p:20},{t:"Feeling connected even apart",p:16},{t:"Making it a running joke",p:12}]},
+    {q:"Name something that makes a couple's banter flirty rather than just funny.", answers:[{t:"The underlying attraction",p:28},{t:"A wink or smile after",p:24},{t:"Playful physical touch",p:20},{t:"Never really \"losing\"",p:16},{t:"Ending in a kiss",p:12}]},
+    {q:"Name a flirty way to describe someone you're falling for.", answers:[{t:"My weakness",p:28},{t:"Trouble",p:24},{t:"The one who got me",p:20},{t:"My favorite distraction",p:16},{t:"Dangerously charming",p:12}]},
+    {q:"Name something a couple might do for a flirty photoshoot together.", answers:[{t:"Cute matching outfits",p:28},{t:"Playful poses",p:24},{t:"Candid laughing shots",p:20},{t:"A kiss photo",p:16},{t:"Silly, romantic shots",p:12}]},
+    {q:"Name a flirty thing about finally closing the distance and living together.", answers:[{t:"No more goodnights over the phone",p:30},{t:"Waking up next to them",p:26},{t:"Getting to flirt in person daily",p:18},{t:"Never running out of \"us\" time",p:14},{t:"Making up for lost time",p:12}]},
+    {q:"Name something that makes a long-distance couple's reunion kiss unforgettable.", answers:[{t:"The buildup of missing each other",p:30},{t:"Not wanting to pull away",p:26},{t:"Tears of happiness",p:18},{t:"Feeling complete again",p:16},{t:"Everyone around just watching in awe",p:10}]}
+  ]},
+  { key:"relationship", name:"Relationship", flirty:false, questions:[
+    {q:"Name something long-distance couples do to stay connected.", answers:[{t:"Video call",p:32},{t:"Text throughout the day",p:26},{t:"Send pictures",p:18},{t:"Watch movies together online",p:14},{t:"Call before bed",p:10}]},
+    {q:"What's the hardest part of being in a long-distance relationship?", answers:[{t:"Missing physical touch",p:30},{t:"Time zone differences",p:24},{t:"Loneliness",p:20},{t:"Not sharing daily life",p:16},{t:"Trust or insecurity",p:10}]},
+    {q:"Name something couples argue about.", answers:[{t:"Money",p:28},{t:"Time spent together",p:24},{t:"Household chores",p:18},{t:"Family",p:16},{t:"Communication",p:14}]},
+    {q:"Name an important quality in a partner.", answers:[{t:"Trust",p:32},{t:"Honesty",p:26},{t:"Communication",p:18},{t:"Support",p:14},{t:"Loyalty",p:10}]},
+    {q:"Name something couples do to resolve a fight.", answers:[{t:"Talk it out",p:34},{t:"Apologize",p:24},{t:"Give each other space",p:18},{t:"Compromise",p:14},{t:"Hug it out",p:10}]},
+    {q:"Name a way partners support each other's goals.", answers:[{t:"Encouragement",p:30},{t:"Listening",p:24},{t:"Helping practically",p:20},{t:"Celebrating wins",p:16},{t:"Being patient",p:10}]},
+    {q:"Why do people say \"distance makes the heart grow fonder\"?", answers:[{t:"You appreciate each other more",p:32},{t:"You miss each other",p:26},{t:"You value time together more",p:20},{t:"You communicate more deeply",p:13},{t:"Trust grows",p:9}]},
+    {q:"Name something couples plan for their future together.", answers:[{t:"Moving in together",p:30},{t:"Marriage",p:26},{t:"Vacations or trips",p:18},{t:"Careers",p:14},{t:"Kids",p:12}]},
+    {q:"Name something that builds trust in a relationship.", answers:[{t:"Honesty",p:32},{t:"Keeping promises",p:24},{t:"Communication",p:20},{t:"Consistency",p:14},{t:"Being faithful",p:10}]},
+    {q:"Name a red flag in a relationship.", answers:[{t:"Lying",p:30},{t:"Jealousy or controlling behavior",p:26},{t:"Poor communication",p:18},{t:"Disrespect",p:15},{t:"Inconsistency",p:11}]},
+    {q:"Name something couples do together even when apart.", answers:[{t:"Watch the same show",p:30},{t:"Eat \"together\" on a video call",p:24},{t:"Play online games",p:20},{t:"Read the same book",p:15},{t:"A virtual date night",p:11}]},
+    {q:"What's the key to making a long-distance relationship work?", answers:[{t:"Communication",p:35},{t:"Trust",p:28},{t:"Commitment",p:18},{t:"A plan to close the distance",p:12},{t:"Patience",p:7}]},
+    {q:"Name something couples need to agree on before moving in together.", answers:[{t:"Finances",p:28},{t:"Chores and responsibilities",p:24},{t:"House rules",p:20},{t:"Space and alone time",p:16},{t:"Long-term plans",p:12}]},
+    {q:"Name a reason people go to couples therapy.", answers:[{t:"Communication issues",p:30},{t:"Trust issues",p:24},{t:"Frequent arguing",p:18},{t:"Feeling disconnected",p:16},{t:"Working through a big decision",p:12}]},
+    {q:"Name something that helps couples handle conflict better.", answers:[{t:"Staying calm",p:28},{t:"Really listening",p:24},{t:"Taking a break to cool off",p:20},{t:"Compromising",p:16},{t:"Apologizing sincerely",p:12}]},
+    {q:"Name a common cause of jealousy in a relationship.", answers:[{t:"Insecurity",p:28},{t:"Past trust issues",p:24},{t:"Social media",p:20},{t:"Spending time with others",p:16},{t:"Lack of communication",p:12}]},
+    {q:"Name something couples should do to keep growing together.", answers:[{t:"Try new things",p:28},{t:"Keep communicating openly",p:24},{t:"Support each other's goals",p:20},{t:"Make time for each other",p:16},{t:"Keep learning about each other",p:12}]},
+    {q:"Name a way to know your partner really understands you.", answers:[{t:"They know what you need without asking",p:28},{t:"They finish your sentences",p:26},{t:"They remember the little things",p:20},{t:"They can tell your mood instantly",p:14},{t:"They support you without judgment",p:12}]},
+    {q:"Name something couples compromise on.", answers:[{t:"Where to live",p:28},{t:"How to spend money",p:24},{t:"Vacation plans",p:20},{t:"Chores",p:16},{t:"How to spend free time",p:12}]},
+    {q:"Name a reason a long-distance relationship might not work out.", answers:[{t:"Growing apart",p:28},{t:"Lack of communication",p:24},{t:"Trust issues",p:20},{t:"No plan to close the distance",p:16},{t:"Loneliness becomes too much",p:12}]},
+    {q:"Name something that helps rebuild trust after it's broken.", answers:[{t:"Honesty",p:30},{t:"Time",p:24},{t:"Consistency",p:20},{t:"Transparency",p:14},{t:"Patience",p:12}]},
+    {q:"Name a way couples make big decisions together.", answers:[{t:"Talk it through",p:30},{t:"List pros and cons",p:24},{t:"Compromise",p:20},{t:"Consider both people's needs",p:14},{t:"Take time before deciding",p:12}]},
+    {q:"Name something that shows genuine commitment in a relationship.", answers:[{t:"Making future plans together",p:28},{t:"Being there during hard times",p:24},{t:"Prioritizing the relationship",p:20},{t:"Staying loyal",p:16},{t:"Working through problems instead of leaving",p:12}]},
+    {q:"Name a sign that a relationship is healthy.", answers:[{t:"Good communication",p:28},{t:"Mutual respect",p:24},{t:"Trust",p:20},{t:"Supporting each other",p:16},{t:"Feeling safe being yourself",p:12}]},
+    {q:"Name something couples need to be honest with each other about.", answers:[{t:"Feelings",p:28},{t:"Finances",p:24},{t:"Past relationships",p:20},{t:"Needs and boundaries",p:16},{t:"Mistakes",p:12}]},
+    {q:"Name a reason people say communication is the \"key\" to relationships.", answers:[{t:"It prevents misunderstandings",p:30},{t:"It builds trust",p:24},{t:"It helps solve problems",p:20},{t:"It keeps you close",p:14},{t:"It shows you care",p:12}]},
+    {q:"Name something couples do to maintain independence in a relationship.", answers:[{t:"Keep their own friends",p:28},{t:"Have their own hobbies",p:24},{t:"Spend time apart sometimes",p:20},{t:"Pursue their own goals",p:16},{t:"Have \"me time\"",p:12}]},
+    {q:"Name a way partners can support each other during stressful times.", answers:[{t:"Listen without judging",p:28},{t:"Offer help",p:24},{t:"Give encouragement",p:20},{t:"Be patient",p:16},{t:"Just be present",p:12}]},
+    {q:"Name something that can slowly damage a relationship if ignored.", answers:[{t:"Resentment",p:28},{t:"Poor communication",p:24},{t:"Lack of trust",p:20},{t:"Taking each other for granted",p:16},{t:"Unresolved arguments",p:12}]},
+    {q:"Name a reason people choose to stay in a long-distance relationship.", answers:[{t:"They love each other",p:30},{t:"They believe it's worth it",p:24},{t:"They have a plan to close the distance",p:18},{t:"The connection is too strong to give up",p:16},{t:"They trust each other",p:12}]},
+    {q:"Name something that helps couples feel like a \"team.\"", answers:[{t:"Supporting each other",p:28},{t:"Making decisions together",p:24},{t:"Facing challenges together",p:20},{t:"Celebrating wins together",p:16},{t:"Having each other's back",p:12}]},
+    {q:"Name a way couples show appreciation for each other.", answers:[{t:"Saying thank you",p:28},{t:"Compliments",p:24},{t:"Small gestures",p:20},{t:"Quality time",p:16},{t:"Words of affirmation",p:12}]},
+    {q:"Name something that can cause miscommunication between partners.", answers:[{t:"Assuming instead of asking",p:28},{t:"Texting instead of talking",p:24},{t:"Not listening fully",p:20},{t:"Different communication styles",p:16},{t:"Being distracted",p:12}]},
+    {q:"Name a reason couples set boundaries.", answers:[{t:"To protect their relationship",p:28},{t:"To protect their mental health",p:24},{t:"To build mutual respect",p:20},{t:"To avoid resentment",p:16},{t:"To communicate needs clearly",p:12}]},
+    {q:"Name something that helps a couple reconnect after an argument.", answers:[{t:"Talking it through",p:28},{t:"Apologizing",p:24},{t:"A hug",p:20},{t:"Time together",p:16},{t:"Laughter",p:12}]},
+    {q:"Name a way partners can check in on each other's mental health.", answers:[{t:"Ask \"how are you really\"",p:30},{t:"Notice mood changes",p:24},{t:"Make time to talk",p:20},{t:"Listen without fixing",p:14},{t:"Offer support",p:12}]},
+    {q:"Name a value that's important to share in a long-term relationship.", answers:[{t:"Honesty",p:28},{t:"Respect",p:24},{t:"Family values",p:20},{t:"Financial values",p:16},{t:"Life goals",p:12}]},
+    {q:"Name something that helps couples navigate different schedules, like time zones.", answers:[{t:"Setting a regular call time",p:30},{t:"Being flexible",p:24},{t:"Communicating availability",p:20},{t:"Sending updates throughout the day",p:14},{t:"Patience",p:12}]},
+    {q:"Name a way couples celebrate small everyday wins together.", answers:[{t:"A quick call to share the news",p:28},{t:"A congratulatory text",p:24},{t:"Doing something special later",p:20},{t:"Just saying \"I'm proud of you\"",p:16},{t:"Sharing it with friends or family",p:12}]},
+    {q:"Name something that makes a couple feel truly \"in it together.\"", answers:[{t:"Facing challenges as a team",p:30},{t:"Supporting each other's dreams",p:24},{t:"Never giving up on each other",p:20},{t:"Making decisions together",p:14},{t:"Always having each other's back",p:12}]},
+    {q:"Name something couples need to navigate different love languages.", answers:[{t:"Understanding each other's needs",p:28},{t:"Communication",p:26},{t:"Compromise",p:20},{t:"Patience",p:14},{t:"Learning what makes each feel loved",p:12}]},
+    {q:"Name a reason people say opposites attract.", answers:[{t:"They balance each other out",p:30},{t:"Different strengths complement each other",p:24},{t:"It keeps things interesting",p:20},{t:"They learn from each other",p:14},{t:"They challenge each other to grow",p:12}]},
+    {q:"Name something couples argue about that's really about something deeper.", answers:[{t:"Feeling unappreciated",p:28},{t:"Feeling unheard",p:26},{t:"Trust issues",p:18},{t:"Fear of the future",p:16},{t:"Insecurity",p:12}]},
+    {q:"Name a way to keep a relationship equal and balanced.", answers:[{t:"Splitting responsibilities fairly",p:28},{t:"Both partners compromising",p:24},{t:"Respecting each other's opinions",p:20},{t:"Supporting both people's goals",p:16},{t:"Open communication",p:12}]},
+    {q:"Name something that helps couples navigate financial disagreements.", answers:[{t:"Budgeting together",p:28},{t:"Being transparent about spending",p:24},{t:"Setting shared goals",p:20},{t:"Compromising on priorities",p:16},{t:"Regular money talks",p:12}]},
+    {q:"Name a reason people say you have to love yourself before loving someone else.", answers:[{t:"You can't pour from an empty cup",p:28},{t:"Self-worth affects the relationship",p:24},{t:"It prevents unhealthy dependence",p:20},{t:"It sets a standard for how you're treated",p:16},{t:"It makes the relationship healthier",p:12}]},
+    {q:"Name something that helps couples navigate meeting each other's families.", answers:[{t:"Being respectful",p:28},{t:"Being patient",p:24},{t:"Communicating expectations",p:20},{t:"Finding common ground",p:16},{t:"Showing genuine interest",p:12}]},
+    {q:"Name a reason people say relationships take \"work.\"", answers:[{t:"You have to keep communicating",p:28},{t:"You have to keep choosing each other",p:24},{t:"Problems don't fix themselves",p:20},{t:"Growth requires effort",p:16},{t:"Love alone isn't always enough",p:12}]},
+    {q:"Name something that shows a partner respects your boundaries.", answers:[{t:"They don't push when you say no",p:28},{t:"They ask before assuming",p:24},{t:"They give you space when needed",p:20},{t:"They listen without arguing",p:16},{t:"They adjust their behavior",p:12}]},
+    {q:"Name a way couples build a strong foundation early on.", answers:[{t:"Open communication",p:28},{t:"Getting to know each other deeply",p:24},{t:"Being honest from the start",p:20},{t:"Establishing trust",p:16},{t:"Sharing values",p:12}]},
+    {q:"Name something that can help a relationship survive a big life change.", answers:[{t:"Communication",p:28},{t:"Flexibility",p:24},{t:"Support",p:20},{t:"Patience",p:16},{t:"Staying committed to each other",p:12}]},
+    {q:"Name a reason people say honesty is the best policy in relationships.", answers:[{t:"It builds trust",p:30},{t:"It avoids bigger problems later",p:24},{t:"It shows respect",p:18},{t:"It keeps the relationship real",p:16},{t:"Lies eventually come out",p:12}]},
+    {q:"Name something that helps a couple recover from a betrayal.", answers:[{t:"Time",p:28},{t:"Honest conversations",p:24},{t:"Genuine remorse",p:20},{t:"Rebuilding trust slowly",p:16},{t:"Professional help or counseling",p:12}]},
+    {q:"Name a way partners can avoid taking each other for granted.", answers:[{t:"Regularly expressing gratitude",p:28},{t:"Not getting too comfortable",p:24},{t:"Keeping the romance alive",p:20},{t:"Checking in on each other",p:16},{t:"Never stopping the effort",p:12}]},
+    {q:"Name something couples need to figure out about merging their lives together.", answers:[{t:"How to split expenses",p:28},{t:"Where to live",p:24},{t:"Combining routines",p:20},{t:"Merging social circles",p:16},{t:"Long-term goals",p:12}]},
+    {q:"Name a reason people say communication is a skill, not just a trait.", answers:[{t:"It has to be practiced",p:28},{t:"Some people have to learn it",p:24},{t:"It improves with effort",p:20},{t:"Not everyone is naturally good at it",p:16},{t:"It can be taught",p:12}]},
+    {q:"Name something that helps couples support each other's mental health.", answers:[{t:"Checking in often",p:28},{t:"Being non-judgmental",p:24},{t:"Encouraging professional help if needed",p:20},{t:"Being patient",p:16},{t:"Just listening",p:12}]},
+    {q:"Name a way a couple can tell they're truly compatible.", answers:[{t:"They share core values",p:28},{t:"They handle conflict well together",p:24},{t:"They want the same things long-term",p:20},{t:"Being together feels easy",p:16},{t:"They bring out the best in each other",p:12}]},
+    {q:"Name something that helps long-distance couples build trust.", answers:[{t:"Being transparent",p:30},{t:"Consistent communication",p:24},{t:"Keeping promises",p:18},{t:"Being honest about feelings",p:16},{t:"Following through on plans",p:12}]},
+    {q:"Name a reason relationships fail even when there's love.", answers:[{t:"Poor communication",p:28},{t:"Timing isn't right",p:24},{t:"Different life goals",p:20},{t:"Unresolved trust issues",p:16},{t:"Growing in different directions",p:12}]},
+    {q:"Name something that helps couples handle disagreements about family involvement.", answers:[{t:"Setting boundaries together",p:28},{t:"Communicating as a united front",p:24},{t:"Compromising respectfully",p:20},{t:"Discussing expectations early",p:16},{t:"Respecting each other's family too",p:12}]},
+    {q:"Name a way partners show they're each other's priority.", answers:[{t:"Making time despite busy schedules",p:28},{t:"Checking in during the day",p:24},{t:"Putting the relationship first in decisions",p:20},{t:"Showing up when it matters",p:16},{t:"Not letting other things come before them",p:12}]},
+    {q:"Name something that helps couples navigate jealousy in a healthy way.", answers:[{t:"Open conversations about it",p:28},{t:"Reassurance",p:24},{t:"Building self-confidence",p:20},{t:"Trusting your partner",p:16},{t:"Addressing insecurities directly",p:12}]},
+    {q:"Name a reason people say a strong friendship is the base of a good relationship.", answers:[{t:"You genuinely enjoy each other's company",p:28},{t:"You can be yourselves together",p:24},{t:"It builds long-term connection",p:20},{t:"Trust comes easier",p:16},{t:"Romance fades but friendship lasts",p:12}]},
+    {q:"Name something couples do to navigate differing communication styles.", answers:[{t:"Learning each other's style",p:28},{t:"Being patient with each other",p:24},{t:"Compromising on how to talk things through",p:20},{t:"Asking clarifying questions",p:16},{t:"Avoiding assumptions",p:12}]},
+    {q:"Name a reason people say actions speak louder than words in relationships.", answers:[{t:"Words are easy, follow-through matters",p:30},{t:"Behavior shows true feelings",p:24},{t:"Promises mean nothing without action",p:18},{t:"Consistency builds trust",p:16},{t:"People show love differently",p:12}]},
+    {q:"Name something that helps a relationship survive long working hours or busy schedules.", answers:[{t:"Quality over quantity of time",p:28},{t:"Scheduling dedicated time together",p:24},{t:"Checking in throughout the day",p:20},{t:"Being understanding",p:16},{t:"Prioritizing each other despite busyness",p:12}]},
+    {q:"Name a way partners can grow individually while staying close as a couple.", answers:[{t:"Supporting personal goals",p:28},{t:"Encouraging hobbies and friendships",p:24},{t:"Having separate identities",p:20},{t:"Checking in regularly",p:16},{t:"Balancing \"me time\" and \"we time\"",p:12}]},
+    {q:"Name something that helps couples handle differing opinions on big life decisions.", answers:[{t:"Open, honest discussion",p:28},{t:"Weighing both perspectives",p:24},{t:"Compromise",p:20},{t:"Considering the relationship as a whole",p:16},{t:"Patience",p:12}]},
+    {q:"Name a reason people say trust, once broken, is hard to rebuild.", answers:[{t:"It takes consistent proof over time",p:30},{t:"Doubt lingers",p:24},{t:"Old wounds resurface easily",p:18},{t:"It requires both people's effort",p:16},{t:"Forgiveness doesn't erase memory",p:12}]},
+    {q:"Name something that helps partners feel emotionally safe with each other.", answers:[{t:"Non-judgmental listening",p:28},{t:"Consistency",p:24},{t:"Honesty",p:20},{t:"Respect for feelings",p:16},{t:"Not using vulnerabilities against them",p:12}]},
+    {q:"Name a way couples navigate differing social needs, like introvert and extrovert.", answers:[{t:"Compromising on plans",p:28},{t:"Respecting each other's energy levels",p:24},{t:"Communicating needs clearly",p:20},{t:"Balancing social time and alone time",p:16},{t:"Supporting each other's preferences",p:12}]},
+    {q:"Name something couples do to make sure both people feel heard.", answers:[{t:"Active listening",p:30},{t:"Taking turns talking",p:24},{t:"Validating each other's feelings",p:18},{t:"Not interrupting",p:16},{t:"Asking follow-up questions",p:12}]},
+    {q:"Name a reason people say the first year of a relationship is important.", answers:[{t:"You learn each other's habits",p:28},{t:"You establish communication patterns",p:24},{t:"You build the foundation of trust",p:20},{t:"You figure out compatibility",p:16},{t:"You set expectations",p:12}]},
+    {q:"Name something that helps a long-distance couple plan their future together confidently.", answers:[{t:"Setting a timeline to close the distance",p:30},{t:"Discussing long-term goals",p:24},{t:"Building trust and consistency",p:18},{t:"Visiting as often as possible",p:16},{t:"Staying committed to the plan",p:12}]},
+    {q:"Name a way partners can avoid keeping score in a relationship.", answers:[{t:"Not tallying who did more",p:28},{t:"Giving without expecting something back",p:24},{t:"Focusing on teamwork",p:20},{t:"Communicating needs instead of resenting",p:16},{t:"Letting go of small things",p:12}]},
+    {q:"Name something that helps couples navigate a partner's difficult family dynamics.", answers:[{t:"Being supportive, not judgmental",p:28},{t:"Setting healthy boundaries",p:24},{t:"Communicating as a team",p:20},{t:"Being patient",p:16},{t:"Offering a safe space",p:12}]},
+    {q:"Name a reason people say respect matters more than romance long-term.", answers:[{t:"Romance fades, respect sustains",p:30},{t:"It's the base of trust",p:24},{t:"It shows how you treat each other daily",p:18},{t:"Without it, resentment builds",p:16},{t:"It's foundational to partnership",p:12}]},
+    {q:"Name something that helps couples stay connected during a busy season of life.", answers:[{t:"Small check-ins",p:28},{t:"Scheduling quality time",p:24},{t:"Being patient with each other",p:20},{t:"Communicating needs",p:16},{t:"Not letting emotional distance grow",p:12}]},
+    {q:"Name a way couples handle differing love languages in a long-distance relationship.", answers:[{t:"Adapting to show love in ways the other understands",p:30},{t:"Communicating what makes them feel loved",p:24},{t:"Being intentional despite the distance",p:18},{t:"Learning each other's needs",p:16},{t:"Getting creative, like voice notes for touch",p:12}]},
+    {q:"Name something that helps partners avoid miscommunication over text.", answers:[{t:"Clarifying tone",p:28},{t:"Calling instead when it's important",p:24},{t:"Avoiding assumptions",p:20},{t:"Being clear and direct",p:16},{t:"Asking instead of guessing",p:12}]},
+    {q:"Name a reason people say vulnerability strengthens a relationship.", answers:[{t:"It builds deeper trust",p:30},{t:"It shows real intimacy",p:24},{t:"It allows real connection",p:18},{t:"It removes walls",p:16},{t:"It shows courage",p:12}]},
+    {q:"Name something that helps couples navigate a partner's insecurities.", answers:[{t:"Reassurance",p:28},{t:"Patience",p:24},{t:"Open communication",p:20},{t:"Consistency",p:16},{t:"Not dismissing their feelings",p:12}]},
+    {q:"Name a way partners can avoid growing apart during distance.", answers:[{t:"Consistent communication",p:30},{t:"Making an effort daily",p:24},{t:"Sharing life details",p:18},{t:"Visiting when possible",p:16},{t:"Keeping the future in mind",p:12}]},
+    {q:"Name something that helps a couple feel like equal partners.", answers:[{t:"Shared decision-making",p:28},{t:"Mutual respect",p:24},{t:"Balanced effort",p:20},{t:"Valuing both opinions",p:16},{t:"Supporting each other equally",p:12}]},
+    {q:"Name a reason people say you can't change someone in a relationship.", answers:[{t:"People change when they want to, not because you ask",p:30},{t:"Real change has to be personal",p:24},{t:"You can only control your own actions",p:18},{t:"Expecting change leads to disappointment",p:16},{t:"Acceptance matters more",p:12}]},
+    {q:"Name something that helps couples set realistic relationship expectations.", answers:[{t:"Open conversations early",p:28},{t:"Understanding each other's needs",p:24},{t:"Avoiding comparison to others",p:20},{t:"Being honest about capacity",p:16},{t:"Adjusting as things change",p:12}]},
+    {q:"Name a way couples can tell if they're truly ready for marriage.", answers:[{t:"They've discussed the big stuff",p:28},{t:"They handle conflict well",p:24},{t:"They want the same future",p:20},{t:"They trust each other completely",p:16},{t:"They feel like true partners",p:12}]},
+    {q:"Name something that helps long-distance couples avoid feeling disconnected.", answers:[{t:"Sharing daily details",p:28},{t:"Frequent calls or texts",p:24},{t:"Video calls",p:20},{t:"Doing things \"together\" apart",p:16},{t:"Staying emotionally open",p:12}]},
+    {q:"Name a reason people say communication style matters as much as content.", answers:[{t:"Tone affects how things land",p:30},{t:"How you say it matters",p:24},{t:"It can prevent unnecessary conflict",p:18},{t:"It builds or breaks trust",p:16},{t:"It shows respect",p:12}]},
+    {q:"Name something that helps couples handle a partner's bad day without conflict.", answers:[{t:"Giving space if needed",p:28},{t:"Listening without trying to fix",p:24},{t:"Offering comfort",p:20},{t:"Being patient",p:16},{t:"Not taking it personally",p:12}]},
+    {q:"Name a way to know a relationship has \"matured.\"", answers:[{t:"Less drama, more understanding",p:28},{t:"Handling conflict calmly",p:24},{t:"Deeper trust",p:20},{t:"Comfortable silence",p:16},{t:"Consistent effort without needing reminders",p:12}]},
+    {q:"Name something that helps couples avoid resentment building up.", answers:[{t:"Addressing issues as they come up",p:30},{t:"Not bottling up feelings",p:24},{t:"Open communication",p:18},{t:"Compromise",p:16},{t:"Regular check-ins",p:12}]},
+    {q:"Name a reason people say you marry the person, not the potential.", answers:[{t:"People should be loved as they are",p:30},{t:"Waiting for change can lead to disappointment",p:24},{t:"Love should be based on reality",p:18},{t:"Growth should be mutual, not one-sided",p:16},{t:"Accepting someone fully matters",p:12}]},
+    {q:"Name something that helps couples navigate long-distance holidays apart.", answers:[{t:"Planning a virtual celebration",p:28},{t:"Sending gifts in advance",p:24},{t:"Scheduling a call during the holiday",p:20},{t:"Creating new traditions",p:16},{t:"Focusing on future holidays together",p:12}]},
+    {q:"Name a way partners build a shared vision for their future.", answers:[{t:"Talking about goals often",p:28},{t:"Aligning values",p:24},{t:"Making joint plans",p:20},{t:"Compromising on differences",p:16},{t:"Checking in on progress together",p:12}]},
+    {q:"Name something that helps a couple feel secure despite distance.", answers:[{t:"Consistency",p:30},{t:"Trust",p:24},{t:"Clear communication",p:18},{t:"A shared plan for the future",p:16},{t:"Reassurance",p:12}]},
+    {q:"Name a reason people say patience is essential in long-distance relationships.", answers:[{t:"Waiting for visits",p:28},{t:"Waiting to close the distance",p:24},{t:"Working through miscommunications takes time",p:20},{t:"Trust builds slowly",p:16},{t:"Good things take time",p:12}]},
+    {q:"Name something that helps couples feel proud of their relationship.", answers:[{t:"Overcoming challenges together",p:28},{t:"Growing stronger over time",p:24},{t:"Supporting each other's dreams",p:20},{t:"Building a life together",p:16},{t:"Choosing each other every day",p:12}]},
+    {q:"Name a reason people say the strongest relationships are built on friendship first.", answers:[{t:"You genuinely like each other",p:30},{t:"Trust forms naturally",p:24},{t:"You can be fully yourselves",p:18},{t:"It creates a lasting bond",p:16},{t:"Romance grows from real connection",p:12}]}
+  ]},
+  { key:"fun", name:"Fun", flirty:false, questions:[
+    {q:"Name a fun date night idea that's not dinner and a movie.", answers:[{t:"Mini golf",p:26},{t:"Game night",p:24},{t:"Cooking class",p:20},{t:"Amusement park",p:16},{t:"Karaoke",p:14}]},
+    {q:"Name something couples like to argue about playfully.", answers:[{t:"Who's the better cook",p:28},{t:"Whose sports team is better",p:24},{t:"Who loves who more",p:20},{t:"Movie or show opinions",p:16},{t:"Who's funnier",p:12}]},
+    {q:"Name a fun game couples play over video call.", answers:[{t:"Trivia",p:28},{t:"Truth or dare",p:24},{t:"Never have I ever",p:20},{t:"Charades",p:16},{t:"This or That",p:12}]},
+    {q:"Name a silly nickname a couple might have as an inside joke.", answers:[{t:"Based on a pet name",p:30},{t:"From a funny memory",p:26},{t:"A mispronounced word",p:20},{t:"A movie character",p:14},{t:"A shared hobby",p:10}]},
+    {q:"Name something couples do for a virtual date night.", answers:[{t:"Watch a movie together online",p:32},{t:"Cook the same meal",p:24},{t:"Play online games",p:20},{t:"Video call dinner",p:14},{t:"Virtual museum tour",p:10}]},
+    {q:"Name a funny thing that happens during video calls.", answers:[{t:"Bad wifi / freezing",p:30},{t:"Talking over each other",p:24},{t:"Pets interrupting",p:20},{t:"Awkward silences",p:16},{t:"Someone falls asleep",p:10}]},
+    {q:"Name a game night classic couples play.", answers:[{t:"Uno",p:26},{t:"Monopoly",p:24},{t:"Cards Against Humanity",p:22},{t:"Jenga",p:16},{t:"Chess",p:12}]},
+    {q:"Name something you'd pack for a surprise weekend visit.", answers:[{t:"Clothes",p:28},{t:"Gifts",p:24},{t:"Snacks or favorite treats",p:20},{t:"Toiletries",p:16},{t:"A playlist or photos",p:12}]},
+    {q:"Name a fun way to surprise your long-distance partner.", answers:[{t:"Surprise visit",p:34},{t:"Care package",p:26},{t:"Surprise delivery (flowers/food)",p:18},{t:"Planned surprise call",p:13},{t:"Handwritten letters",p:9}]},
+    {q:"Name a couple's favorite way to binge-watch together apart.", answers:[{t:"A watch-party app",p:32},{t:"Texting updates while watching",p:24},{t:"Video calling while watching",p:20},{t:"Watching separately, discussing after",p:14},{t:"Counting down to start together",p:10}]},
+    {q:"Name something you'd bring on a road trip together.", answers:[{t:"Snacks",p:28},{t:"Music playlist",p:26},{t:"Phone charger",p:18},{t:"Pillow or blanket",p:16},{t:"Camera",p:12}]},
+    {q:"Name something couples do to make each other laugh.", answers:[{t:"Send memes",p:30},{t:"Tell jokes",p:24},{t:"Make funny faces on video call",p:20},{t:"Do impressions",p:16},{t:"Prank each other",p:10}]},
+    {q:"Name a fun couples' challenge to try over video call.", answers:[{t:"Cooking the same recipe",p:28},{t:"A dance challenge",p:24},{t:"A trivia challenge",p:20},{t:"Trying a new workout together",p:16},{t:"A drawing challenge",p:12}]},
+    {q:"Name a silly thing couples do to pass time on a call.", answers:[{t:"Make faces at each other",p:28},{t:"Sing together",p:24},{t:"Play a guessing game",p:20},{t:"Do impressions",p:16},{t:"Talk in funny voices",p:12}]},
+    {q:"Name a fun tradition long-distance couples might create.", answers:[{t:"A weekly virtual date night",p:30},{t:"A \"good morning\" ritual",p:24},{t:"A shared photo album",p:18},{t:"A countdown to their next visit",p:16},{t:"A special song for calls",p:12}]},
+    {q:"Name something couples like to do at an amusement park.", answers:[{t:"Ride roller coasters",p:28},{t:"Play carnival games",p:24},{t:"Eat funnel cake or treats",p:20},{t:"Take photos",p:16},{t:"Ride the ferris wheel",p:12}]},
+    {q:"Name a fun way to spend a snow day together, even apart.", answers:[{t:"Watch movies and video call",p:28},{t:"Make hot chocolate \"together\"",p:24},{t:"Play games instead of a real snowball fight",p:20},{t:"Cozy up and text all day",p:16},{t:"Build blanket forts on call",p:12}]},
+    {q:"Name something couples do for a themed date night.", answers:[{t:"Cook food from a specific country",p:28},{t:"Dress up for a theme",p:24},{t:"Watch movies from that theme",p:20},{t:"Make themed drinks",p:16},{t:"Decorate the space",p:12}]},
+    {q:"Name a fun outdoor activity couples enjoy.", answers:[{t:"Hiking",p:28},{t:"Picnicking",p:24},{t:"Biking",p:20},{t:"Beach day",p:16},{t:"Camping",p:12}]},
+    {q:"Name something couples like to bet on playfully.", answers:[{t:"Who wins a game",p:28},{t:"Who does a chore",p:24},{t:"A sports game outcome",p:20},{t:"Who's right in an argument",p:16},{t:"Who can last longer at something",p:12}]},
+    {q:"Name a fun app or game couples use to stay close from a distance.", answers:[{t:"A shared game app",p:28},{t:"A couples' Q&A app",p:24},{t:"A movie watch-party app",p:20},{t:"A messaging app with games",p:16},{t:"A photo-sharing app",p:12}]},
+    {q:"Name something silly couples do to celebrate a small victory.", answers:[{t:"A happy dance",p:28},{t:"A goofy photo",p:24},{t:"Treating themselves",p:20},{t:"Bragging to friends",p:16},{t:"A celebratory call",p:12}]},
+    {q:"Name a fun thing to do together during a long car ride.", answers:[{t:"Sing along to music",p:28},{t:"Play road trip games",p:24},{t:"Talk for hours",p:20},{t:"Take a scenic detour",p:16},{t:"Snack and chat",p:12}]},
+    {q:"Name something couples do to make errands like grocery shopping more fun.", answers:[{t:"Video call while shopping",p:28},{t:"Make it a game",p:24},{t:"Grab a treat after",p:20},{t:"Compete on who finds items faster",p:16},{t:"Play music while doing it",p:12}]},
+    {q:"Name a funny excuse for missing a scheduled video call.", answers:[{t:"Fell asleep",p:28},{t:"Wifi went out",p:24},{t:"Lost track of time",p:20},{t:"Phone died",p:16},{t:"Got distracted",p:12}]},
+    {q:"Name a fun way to celebrate a partner's promotion or achievement.", answers:[{t:"Send a gift",p:28},{t:"Plan a celebratory call or visit",p:24},{t:"Order their favorite food delivered to them",p:20},{t:"Brag about them to friends",p:16},{t:"Write a congratulations note",p:12}]},
+    {q:"Name something couples enjoy doing at a carnival or fair.", answers:[{t:"Play games",p:28},{t:"Ride rides",p:24},{t:"Eat fair food",p:20},{t:"Win a prize for each other",p:16},{t:"Watch fireworks",p:12}]},
+    {q:"Name a funny thing that happens when introducing your partner to family.", answers:[{t:"Awkward first impressions",p:28},{t:"Embarrassing stories get told",p:24},{t:"Nervous laughter",p:20},{t:"Lots of questions",p:16},{t:"Parents being overly excited",p:12}]},
+    {q:"Name something couples do for April Fools' Day.", answers:[{t:"Prank each other",p:30},{t:"Send a fake \"big news\" text",p:24},{t:"Try to trick each other on calls",p:20},{t:"Play harmless jokes",p:16},{t:"Laugh it off after",p:10}]},
+    {q:"Name a fun thing to do together on a budget.", answers:[{t:"Have a picnic",p:28},{t:"Movie night at home",p:24},{t:"Go for a walk",p:20},{t:"Cook a meal together",p:16},{t:"Game night",p:12}]},
+    {q:"Name something couples like to do during a power outage.", answers:[{t:"Light candles and talk",p:28},{t:"Play card games",p:24},{t:"Tell stories",p:20},{t:"Cuddle up",p:16},{t:"Stargaze",p:12}]},
+    {q:"Name a fun way to plan a surprise visit without getting caught.", answers:[{t:"Lie about travel plans",p:28},{t:"Get help from friends or family",p:24},{t:"Time it around a special day",p:20},{t:"Keep it off social media",p:16},{t:"Show up unannounced",p:12}]},
+    {q:"Name something funny pets do that interrupts video calls.", answers:[{t:"Jump on the keyboard",p:28},{t:"Bark or meow loudly",p:24},{t:"Knock things over",p:20},{t:"Demand attention",p:16},{t:"Sit right in front of the camera",p:12}]},
+    {q:"Name a fun way couples celebrate a holiday apart.", answers:[{t:"Exchange gifts over video call",p:28},{t:"Cook the same holiday meal",p:24},{t:"Decorate \"together\" on call",p:20},{t:"Send a care package",p:16},{t:"Watch holiday movies together",p:12}]},
+    {q:"Name something couples argue about that's actually kind of funny.", answers:[{t:"Who's the messier one",p:28},{t:"Who snores louder",p:24},{t:"Who's more dramatic",p:20},{t:"Whose turn it is to pick the movie",p:16},{t:"Who said \"I love you\" first",p:12}]},
+    {q:"Name something for a fun inside-joke moment couples share.", answers:[{t:"A running gag",p:26},{t:"A \"that's so us\" moment",p:24},{t:"A code word",p:20},{t:"A silly catchphrase",p:18},{t:"A recurring bit",p:12}]},
+    {q:"Name something couples do to hype each other up before something stressful.", answers:[{t:"Pep talks",p:28},{t:"Encouraging texts",p:24},{t:"A good luck call",p:20},{t:"Reminders of past wins",p:16},{t:"Silly rituals for luck",p:12}]},
+    {q:"Name a fun way to reveal exciting news to your partner.", answers:[{t:"A surprise video call",p:28},{t:"A cute text tease",p:24},{t:"A countdown or hint game",p:20},{t:"A fun reveal video",p:16},{t:"Wrapping it like a gift",p:12}]},
+    {q:"Name something couples enjoy doing together in the kitchen.", answers:[{t:"Baking",p:28},{t:"Trying a new recipe",p:24},{t:"Taste-testing",p:20},{t:"Dancing while cooking",p:16},{t:"Cooking competitions",p:12}]},
+    {q:"Name a fun distraction couples use to get through a hard day apart.", answers:[{t:"Funny memes",p:28},{t:"A long phone call",p:24},{t:"Watching a comfort show",p:20},{t:"Playing a game together",p:16},{t:"Reminiscing about good memories",p:12}]},
+    {q:"Name a fun way couples plan a scavenger hunt for each other.", answers:[{t:"Hide clues around town",p:28},{t:"Send photo clues remotely",p:24},{t:"Include inside jokes",p:20},{t:"End with a surprise",p:16},{t:"Involve friends to help",p:12}]},
+    {q:"Name something couples do for a \"no plans\" spontaneous day.", answers:[{t:"Just wing it",p:28},{t:"Explore somewhere new",p:24},{t:"Stay in and relax",p:20},{t:"Try a new restaurant",p:16},{t:"Do whatever feels fun in the moment",p:12}]},
+    {q:"Name a fun thing to do at a themed costume party together.", answers:[{t:"Match costumes",p:30},{t:"Take lots of photos",p:24},{t:"Win a contest together",p:18},{t:"Make each other laugh with the outfits",p:16},{t:"Dance the night away",p:12}]},
+    {q:"Name something couples enjoy doing on a rainy weekend.", answers:[{t:"Marathon a show",p:28},{t:"Bake something",p:24},{t:"Play board games",p:20},{t:"Nap together",p:16},{t:"Read together",p:12}]},
+    {q:"Name a fun couples' tradition around a favorite holiday.", answers:[{t:"Decorating together",p:28},{t:"A special holiday meal",p:24},{t:"Exchanging themed gifts",p:20},{t:"Watching holiday movies",p:16},{t:"A yearly photo",p:12}]},
+    {q:"Name something funny that happens on a couple's first road trip together.", answers:[{t:"Getting lost",p:28},{t:"Arguing over music",p:24},{t:"Bad gas station snacks",p:20},{t:"Car troubles",p:16},{t:"Discovering weird habits",p:12}]},
+    {q:"Name a fun thing to do for a \"just for laughs\" video call.", answers:[{t:"Tell embarrassing stories",p:28},{t:"Do impressions",p:24},{t:"Play a joke game",p:20},{t:"React to memes together",p:16},{t:"Do a silly challenge",p:12}]},
+    {q:"Name something couples like about trying a new hobby together.", answers:[{t:"Learning something new",p:28},{t:"Being bad at it together",p:24},{t:"Bonding over the experience",p:20},{t:"Laughing at mistakes",p:16},{t:"Having a fun story to tell",p:12}]},
+    {q:"Name a fun nickname for a couple's shared favorite spot.", answers:[{t:"\"Our spot\"",p:30},{t:"A nickname based on a memory",p:24},{t:"The name of the place",p:20},{t:"An inside joke name",p:16},{t:"Something silly they made up",p:10}]},
+    {q:"Name something couples do to make a boring chore fun.", answers:[{t:"Turn on music",p:28},{t:"Make it a competition",p:24},{t:"Talk while doing it",p:20},{t:"Reward themselves after",p:16},{t:"Do it together instead of alone",p:12}]},
+    {q:"Name a fun way to celebrate reaching a relationship milestone, like one year.", answers:[{t:"A special date",p:28},{t:"A trip",p:24},{t:"Gifts",p:20},{t:"A recap of memories",p:16},{t:"A party with friends",p:12}]},
+    {q:"Name something funny about long-distance couples trying to sync schedules.", answers:[{t:"Time zone confusion",p:30},{t:"Falling asleep on calls",p:24},{t:"Miscommunication about times",p:18},{t:"One person always being tired",p:16},{t:"Constantly asking what time it is there",p:12}]},
+    {q:"Name a fun activity for a couple's \"staycation\" at home.", answers:[{t:"Pretend it's a vacation",p:28},{t:"Order fancy takeout",p:24},{t:"No phones all day",p:20},{t:"Dress up for \"dinner\"",p:16},{t:"Movie marathon",p:12}]},
+    {q:"Name something couples do to make a long wait, like at an airport, fun.", answers:[{t:"People-watch together",p:28},{t:"Play a game on their phones",p:24},{t:"Talk for hours",p:20},{t:"Get snacks and chat",p:16},{t:"Take silly photos",p:12}]},
+    {q:"Name a fun way to react to winning a game against your partner.", answers:[{t:"A victory dance",p:30},{t:"Gloating playfully",p:24},{t:"Demanding a rematch",p:20},{t:"Bragging rights for the week",p:16},{t:"A celebratory kiss",p:10}]},
+    {q:"Name something couples like to do for a themed movie marathon.", answers:[{t:"Pick a franchise",p:28},{t:"Dress like the characters",p:24},{t:"Make themed snacks",p:20},{t:"Rank the movies after",p:16},{t:"Do trivia between movies",p:12}]},
+    {q:"Name a fun thing to do for a couple's \"bucket list\" together.", answers:[{t:"Travel somewhere new",p:28},{t:"Try a new adventure activity",p:24},{t:"Learn a skill together",p:20},{t:"Attend a concert",p:16},{t:"Do something spontaneous",p:12}]},
+    {q:"Name something funny about a couple moving in together for the first time.", answers:[{t:"Merging different styles",p:28},{t:"Arguing over furniture placement",p:24},{t:"Discovering weird habits",p:20},{t:"Not enough closet space",p:16},{t:"Learning to share space",p:12}]},
+    {q:"Name a fun way couples celebrate finishing a big project together.", answers:[{t:"A night out",p:28},{t:"Their favorite meal",p:24},{t:"A relaxing day off",p:20},{t:"Toasting to it",p:16},{t:"Bragging to friends",p:12}]},
+    {q:"Name something couples enjoy about visiting a new city together.", answers:[{t:"Trying local food",p:28},{t:"Exploring landmarks",p:24},{t:"Getting lost together",p:20},{t:"Taking lots of photos",p:16},{t:"Finding a favorite spot",p:12}]},
+    {q:"Name a fun way to spend a couple's anniversary of their first text or DM.", answers:[{t:"Look back at the conversation",p:30},{t:"Recreate the moment",p:24},{t:"Laugh about how it started",p:20},{t:"Share the story again",p:16},{t:"Celebrate how far they've come",p:10}]},
+    {q:"Name something funny about learning a partner's family recipes.", answers:[{t:"Getting the measurements wrong",p:28},{t:"Family secrets revealed",p:24},{t:"A funny cooking disaster",p:20},{t:"Learning \"the right way\"",p:16},{t:"Bonding over the mess",p:12}]},
+    {q:"Name a fun way to plan a partner's \"welcome home\" surprise after time apart.", answers:[{t:"Decorate the space",p:28},{t:"Cook their favorite meal",p:24},{t:"Involve friends or family",p:20},{t:"Make a sign",p:16},{t:"Plan a small celebration",p:12}]},
+    {q:"Name something couples enjoy doing at a music festival or concert together.", answers:[{t:"Singing along",p:28},{t:"Dancing",p:24},{t:"People-watching",p:20},{t:"Trying festival food",p:16},{t:"Making new memories",p:12}]},
+    {q:"Name a fun couples' challenge involving photos.", answers:[{t:"A photo-a-day challenge",p:30},{t:"Recreating old photos",p:24},{t:"A silly photo scavenger hunt",p:18},{t:"Matching outfits for photos",p:16},{t:"A themed photoshoot",p:12}]},
+    {q:"Name something funny about a couple learning to communicate across time zones.", answers:[{t:"Confusing AM and PM",p:30},{t:"Falling asleep mid-call",p:24},{t:"Constant math to figure out times",p:18},{t:"Missed calls due to timing",p:16},{t:"Getting used to odd hours",p:12}]},
+    {q:"Name a fun way couples celebrate finally being together after long distance.", answers:[{t:"A big party",p:28},{t:"A trip to celebrate",p:24},{t:"Just enjoying being in the same place",p:20},{t:"Telling their story to others",p:16},{t:"A toast to the journey",p:12}]},
+    {q:"Name something couples do for a \"recreate your first date\" night.", answers:[{t:"Go to the same place",p:30},{t:"Order the same food",p:24},{t:"Wear something similar",p:18},{t:"Talk about that night",p:16},{t:"Take a new photo there",p:10}]},
+    {q:"Name a fun way to spend time together during a slow, ordinary day.", answers:[{t:"Cook together",p:28},{t:"Watch something together",p:24},{t:"Just talk",p:20},{t:"Take a walk",p:16},{t:"Nap together",p:12}]},
+    {q:"Name something funny couples do when one is trying to nap on a video call.", answers:[{t:"The other stays quiet",p:28},{t:"Playfully taking screenshots",p:24},{t:"Whispering jokes",p:20},{t:"Waiting for them to wake up confused",p:16},{t:"Gently teasing after",p:12}]},
+    {q:"Name a fun thing to do for a \"guess the mystery meal\" cooking night.", answers:[{t:"Cook with a blindfold",p:28},{t:"Guess ingredients by taste",p:24},{t:"Make a surprise dish for each other",p:20},{t:"Rate each other's cooking",p:16},{t:"Turn it into a game",p:12}]},
+    {q:"Name something couples enjoy about a lazy movie marathon day.", answers:[{t:"Blankets and snacks",p:28},{t:"No plans, no rush",p:24},{t:"Picking favorites together",p:20},{t:"Falling asleep halfway through",p:16},{t:"Just being close",p:12}]},
+    {q:"Name a fun tradition for celebrating \"just because\" days.", answers:[{t:"Random surprise gifts",p:28},{t:"A spontaneous date",p:24},{t:"A silly made-up holiday",p:20},{t:"Doing something out of the ordinary",p:16},{t:"Celebrating small wins",p:12}]},
+    {q:"Name something couples like about a game night with friends.", answers:[{t:"Friendly competition",p:28},{t:"Teaming up together",p:24},{t:"Trash talk",p:20},{t:"New games to try",p:16},{t:"Late-night laughter",p:12}]},
+    {q:"Name a fun way to plan a partner's dream day.", answers:[{t:"Ask their favorite things",p:28},{t:"Plan every detail as a surprise",p:24},{t:"Include their favorite food",p:20},{t:"Involve people they love",p:16},{t:"End with something special",p:12}]},
+    {q:"Name something funny that happens during a couple's first cooking disaster together.", answers:[{t:"Burning the food",p:30},{t:"Setting off the smoke alarm",p:24},{t:"Ordering takeout instead",p:18},{t:"Laughing it off",p:16},{t:"Trying again later",p:12}]},
+    {q:"Name a fun way to celebrate a partner finishing a tough week.", answers:[{t:"Plan a relaxing night",p:28},{t:"Order their favorite food",p:24},{t:"Give them a night off from decisions",p:20},{t:"Plan something fun",p:16},{t:"Just be there for them",p:12}]},
+    {q:"Name something couples enjoy about a spontaneous weekend trip.", answers:[{t:"No real plan, just adventure",p:28},{t:"Trying new food",p:24},{t:"Getting a little lost",p:20},{t:"New memories",p:16},{t:"A break from routine",p:12}]},
+    {q:"Name a fun thing to do for a couple's \"flip a coin\" decision night.", answers:[{t:"Let fate decide dinner",p:28},{t:"Flip for who picks the movie",p:24},{t:"Turn small decisions into a game",p:20},{t:"Laugh at the randomness",p:16},{t:"Make it a fun ritual",p:12}]},
+    {q:"Name something funny about couples trying to take the \"perfect\" couple photo.", answers:[{t:"Multiple failed attempts",p:30},{t:"Awkward poses",p:24},{t:"One person blinking every time",p:18},{t:"Getting frustrated but laughing",p:16},{t:"Settling for a silly one instead",p:12}]},
+    {q:"Name a fun way to plan a themed \"around the world\" date night at home.", answers:[{t:"Cook food from different countries",p:28},{t:"Watch films from that country",p:24},{t:"Learn a few phrases",p:20},{t:"Decorate accordingly",p:16},{t:"Make a playlist to match",p:12}]},
+    {q:"Name something couples enjoy about people-watching together.", answers:[{t:"Making up stories about strangers",p:30},{t:"Guessing their lives",p:24},{t:"Laughing at funny moments",p:18},{t:"Commentating together",p:16},{t:"Just enjoying quiet time out",p:12}]},
+    {q:"Name a fun challenge for long-distance couples to try together virtually.", answers:[{t:"A recipe challenge",p:28},{t:"A joint puzzle using photos",p:24},{t:"A workout challenge",p:20},{t:"A trivia night",p:16},{t:"A drawing challenge",p:12}]},
+    {q:"Name something funny about learning to fold laundry \"their way.\"", answers:[{t:"Different folding techniques",p:28},{t:"Arguing over the \"right way\"",p:24},{t:"Giving up and doing it separately",p:20},{t:"Learning a new method",p:16},{t:"Laughing about it after",p:12}]},
+    {q:"Name a fun tradition couples create around trying new restaurants.", answers:[{t:"A rotating \"pick\" system",p:28},{t:"Rating each place after",p:24},{t:"A bucket list of places to try",p:20},{t:"Recreating favorite dishes at home",p:16},{t:"A running list of favorites",p:12}]},
+    {q:"Name something couples enjoy about a themed trivia night together.", answers:[{t:"Testing how well they know each other",p:28},{t:"Competing playfully",p:24},{t:"Learning new facts",p:20},{t:"Bragging rights",p:16},{t:"Laughing at wrong answers",p:12}]},
+    {q:"Name a fun way couples plan a \"surprise reunion\" after long distance.", answers:[{t:"A secret trip",p:28},{t:"Showing up unannounced",p:24},{t:"A countdown reveal",p:20},{t:"Involving friends to help plan",p:16},{t:"Capturing the reaction on video",p:12}]},
+    {q:"Name something funny about couples trying to assemble furniture together.", answers:[{t:"Miscounted pieces",p:28},{t:"Disagreeing on instructions",p:24},{t:"Extra leftover screws",p:20},{t:"Frustration turning into laughter",p:16},{t:"Finally finishing, exhausted",p:12}]},
+    {q:"Name a fun tradition for celebrating each other's birthdays from a distance.", answers:[{t:"A virtual party",p:28},{t:"Sending gifts to arrive that day",p:24},{t:"A surprise video message from friends",p:20},{t:"A planned visit around it",p:16},{t:"A special call all day",p:12}]},
+    {q:"Name something couples enjoy about doing a puzzle together, in person or virtually.", answers:[{t:"The teamwork",p:28},{t:"The satisfaction of finishing",p:24},{t:"Talking while working on it",p:20},{t:"Friendly competition over pieces",p:16},{t:"A relaxing shared activity",p:12}]},
+    {q:"Name a fun way to plan a \"no-reason\" celebration for your partner.", answers:[{t:"Surprise gift",p:28},{t:"A fun date",p:24},{t:"A heartfelt note",p:20},{t:"Their favorite meal",p:16},{t:"Just telling them why you appreciate them",p:12}]},
+    {q:"Name something funny about pets reacting to a partner on video call.", answers:[{t:"Getting overly excited",p:28},{t:"Not recognizing the voice at first",p:24},{t:"Trying to \"talk\" to the screen",p:20},{t:"Ignoring them completely",p:16},{t:"Barking at the phone",p:12}]},
+    {q:"Name a fun tradition for a couple's \"half birthday\" or random milestone.", answers:[{t:"A silly mini celebration",p:28},{t:"A themed treat",p:24},{t:"An excuse for a date",p:20},{t:"A joke gift",p:16},{t:"Marking the calendar for fun",p:12}]},
+    {q:"Name something couples do to make waiting for a video call start time fun.", answers:[{t:"Send countdown texts",p:28},{t:"Get snacks ready",p:24},{t:"Plan what to talk about",p:20},{t:"Get dressed up for it",p:16},{t:"Build anticipation together",p:12}]},
+    {q:"Name a fun way to plan a partner's \"welcome to my city\" visit.", answers:[{t:"A curated itinerary",p:28},{t:"Introducing them to favorite spots",p:24},{t:"Meeting friends and family",p:20},{t:"A surprise favorite food stop",p:16},{t:"Ending with something memorable",p:12}]},
+    {q:"Name something funny about learning your partner's quirky habits.", answers:[{t:"Odd sleep habits",p:28},{t:"Weird food combos",p:24},{t:"Talking to pets like people",p:20},{t:"Specific organizing habits",p:16},{t:"Funny nervous habits",p:12}]},
+    {q:"Name a fun tradition couples create for the first snow or a favorite season.", answers:[{t:"A themed photo",p:28},{t:"A special seasonal treat",p:24},{t:"A cozy movie night",p:20},{t:"A seasonal activity",p:16},{t:"Marking it every year",p:12}]},
+    {q:"Name something couples enjoy about planning a future trip together, even before booking it.", answers:[{t:"Making a wish list",p:28},{t:"Researching destinations",p:24},{t:"Imagining the adventure",p:20},{t:"Saving money together",p:16},{t:"Building excitement",p:12}]},
+    {q:"Name a fun way to celebrate finally being in the same time zone after moving.", answers:[{t:"No more time zone math",p:28},{t:"Staying up late just because they can",p:24},{t:"Spontaneous plans",p:20},{t:"No more \"goodnight\" calls needed",p:16},{t:"Celebrating the small freedom",p:12}]},
+    {q:"Name something couples will laugh about years from now.", answers:[{t:"Their awkward first date",p:28},{t:"Silly arguments over nothing",p:24},{t:"Their long-distance struggles",p:20},{t:"Funny mishaps along the way",p:16},{t:"How far they've come",p:12}]}
+  ]},
+  { key:"deep", name:"Deep", flirty:false, questions:[
+    {q:"Name something that makes a relationship last.", answers:[{t:"Communication",p:32},{t:"Trust",p:26},{t:"Respect",p:18},{t:"Commitment",p:14},{t:"Love",p:10}]},
+    {q:"Name something people fear in a relationship.", answers:[{t:"Being cheated on",p:30},{t:"Losing the person",p:24},{t:"Growing apart",p:20},{t:"Not being enough",p:16},{t:"Rejection",p:10}]},
+    {q:"Name a way people show love without saying \"I love you.\"", answers:[{t:"Acts of service",p:30},{t:"Quality time",p:24},{t:"Physical touch",p:18},{t:"Gifts",p:15},{t:"Words of affirmation",p:13}]},
+    {q:"Name something couples should talk about before getting serious.", answers:[{t:"Future goals",p:28},{t:"Finances",p:24},{t:"Family plans or kids",p:20},{t:"Values",p:16},{t:"Living situation",p:12}]},
+    {q:"Name a fear specific to long-distance couples.", answers:[{t:"Growing apart",p:32},{t:"Being cheated on",p:26},{t:"Missing milestones",p:18},{t:"Never closing the distance",p:14},{t:"Losing connection",p:10}]},
+    {q:"Name the most important thing to have in a marriage.", answers:[{t:"Trust",p:32},{t:"Communication",p:26},{t:"Love",p:18},{t:"Respect",p:14},{t:"Patience",p:10}]},
+    {q:"Name something people learn about themselves through love.", answers:[{t:"Patience",p:28},{t:"What they truly want",p:24},{t:"Their own flaws",p:20},{t:"How to compromise",p:16},{t:"Their own worth",p:12}]},
+    {q:"Name a sacrifice people make for love.", answers:[{t:"Moving cities",p:30},{t:"Giving up time with friends",p:22},{t:"Career changes",p:20},{t:"Compromising on plans",p:16},{t:"Financial sacrifices",p:12}]},
+    {q:"Name something that helps couples grow closer over time.", answers:[{t:"Shared experiences",p:30},{t:"Overcoming challenges together",p:26},{t:"Deep conversations",p:20},{t:"Vulnerability",p:14},{t:"Time",p:10}]},
+    {q:"Name a milestone that makes a relationship feel \"real.\"", answers:[{t:"Meeting the family",p:28},{t:"Saying \"I love you\"",p:26},{t:"Moving in together",p:20},{t:"Getting engaged",p:16},{t:"Their first trip together",p:10}]},
+    {q:"Name something that's hard to say but important in a relationship.", answers:[{t:"I was wrong",p:32},{t:"I'm scared",p:24},{t:"I need space",p:20},{t:"I need you",p:14},{t:"This isn't working",p:10}]},
+    {q:"Name something you'd hope your partner says about you one day.", answers:[{t:"They made me a better person",p:30},{t:"They were my best friend",p:26},{t:"They never gave up on us",p:20},{t:"They loved me unconditionally",p:14},{t:"They were my person",p:10}]},
+    {q:"Name something that helps people forgive their partner.", answers:[{t:"Understanding their side",p:28},{t:"Time",p:24},{t:"A genuine apology",p:20},{t:"Love and commitment",p:16},{t:"Letting go of resentment",p:12}]},
+    {q:"Name a fear people have about commitment.", answers:[{t:"Losing independence",p:28},{t:"Getting hurt again",p:24},{t:"Making the wrong choice",p:20},{t:"Losing themselves",p:16},{t:"It not working out",p:12}]},
+    {q:"Name something that shows unconditional love.", answers:[{t:"Loving someone through their flaws",p:30},{t:"Staying during hard times",p:24},{t:"Supporting them no matter what",p:20},{t:"Forgiving mistakes",p:14},{t:"Accepting them fully",p:12}]},
+    {q:"Name a reason people struggle to open up emotionally.", answers:[{t:"Fear of judgment",p:28},{t:"Past hurt or trauma",p:24},{t:"Fear of rejection",p:20},{t:"Not wanting to seem weak",p:16},{t:"Trust issues",p:12}]},
+    {q:"Name something that helps you know it's \"real love.\"", answers:[{t:"You feel safe being yourself",p:30},{t:"You want the best for them, even over yourself",p:24},{t:"You can't picture life without them",p:20},{t:"They accept all of you",p:14},{t:"It's calm, not chaotic",p:12}]},
+    {q:"Name a lesson heartbreak teaches people.", answers:[{t:"What they truly want",p:28},{t:"Self-worth",p:24},{t:"How to heal",p:20},{t:"What red flags to avoid",p:16},{t:"Resilience",p:12}]},
+    {q:"Name something that makes long-distance love feel worth it.", answers:[{t:"The connection despite the distance",p:30},{t:"Knowing it's temporary",p:24},{t:"The reunions",p:18},{t:"Growing stronger through challenges",p:16},{t:"Proving love can survive anything",p:12}]},
+    {q:"Name a way people cope with missing their partner.", answers:[{t:"Looking at photos or videos",p:28},{t:"Talking to friends about it",p:24},{t:"Keeping busy",p:20},{t:"Writing them a letter",p:16},{t:"Counting down to reunion",p:12}]},
+    {q:"Name something people realize about love as they get older.", answers:[{t:"It takes work",p:28},{t:"It's a choice, not just a feeling",p:24},{t:"Communication matters more than passion",p:20},{t:"Patience is key",p:16},{t:"The right person makes it easier",p:12}]},
+    {q:"Name a way trust is tested in a relationship.", answers:[{t:"Time apart",p:28},{t:"Temptation",p:24},{t:"Difficult conversations",p:20},{t:"Past mistakes resurfacing",p:16},{t:"Uncertainty about the future",p:12}]},
+    {q:"Name something couples discover about each other during hard times.", answers:[{t:"Their true character",p:30},{t:"How they handle stress",p:24},{t:"Their resilience",p:18},{t:"How much they care",p:16},{t:"Their loyalty",p:12}]},
+    {q:"Name a reason people are afraid to say \"I love you\" first.", answers:[{t:"Fear it's not reciprocated",p:30},{t:"Fear of vulnerability",p:24},{t:"Fear of moving too fast",p:20},{t:"Past heartbreak",p:14},{t:"Fear of rejection",p:12}]},
+    {q:"Name something that helps people heal after a breakup.", answers:[{t:"Time",p:30},{t:"Support from friends or family",p:24},{t:"Self-reflection",p:20},{t:"Focusing on themselves",p:14},{t:"Learning from it",p:12}]},
+    {q:"Name a way distance changes a relationship, for better or worse.", answers:[{t:"It tests commitment",p:28},{t:"It builds trust and communication",p:24},{t:"It can create insecurity",p:20},{t:"It teaches patience",p:16},{t:"It clarifies what truly matters",p:12}]},
+    {q:"Name something that makes someone truly \"ready\" for a serious relationship.", answers:[{t:"Emotional maturity",p:28},{t:"Knowing what they want",p:24},{t:"Being over past relationships",p:20},{t:"Life stability",p:16},{t:"Willingness to compromise",p:12}]},
+    {q:"Name a deep question couples should ask each other early on.", answers:[{t:"What are your life goals?",p:28},{t:"What does love mean to you?",p:24},{t:"What are your values?",p:20},{t:"How do you handle conflict?",p:16},{t:"What do you need to feel loved?",p:12}]},
+    {q:"Name something that makes vulnerability hard but important in love.", answers:[{t:"Fear of getting hurt",p:30},{t:"It requires trust",p:24},{t:"It exposes weaknesses",p:18},{t:"It takes courage",p:16},{t:"It's necessary for real intimacy",p:12}]},
+    {q:"Name a way people show they've truly grown from past relationships.", answers:[{t:"Better communication",p:28},{t:"Healthier boundaries",p:24},{t:"Trusting more easily",p:20},{t:"Choosing partners more wisely",p:16},{t:"Not repeating old patterns",p:12}]},
+    {q:"Name something couples need in order to survive hard times together.", answers:[{t:"Communication",p:28},{t:"Trust",p:24},{t:"Patience",p:20},{t:"Commitment",p:16},{t:"Unconditional support",p:12}]},
+    {q:"Name a reason people say \"the right person is worth the wait.\"", answers:[{t:"Real love takes time to build",p:30},{t:"Rushing leads to mistakes",p:24},{t:"Patience shows commitment",p:18},{t:"Good things come to those who wait",p:16},{t:"Timing matters",p:12}]},
+    {q:"Name something that helps couples stay hopeful during hard times apart.", answers:[{t:"Faith in the relationship",p:28},{t:"Focusing on the future",p:24},{t:"Reminders of why they started",p:20},{t:"Support from each other",p:16},{t:"Small moments of connection",p:12}]},
+    {q:"Name a way love changes a person for the better.", answers:[{t:"Makes them more patient",p:28},{t:"Teaches them to compromise",p:24},{t:"Makes them kinder",p:20},{t:"Helps them grow emotionally",p:16},{t:"Teaches selflessness",p:12}]},
+    {q:"Name something that's more important than romance in a lasting relationship.", answers:[{t:"Friendship",p:30},{t:"Trust",p:24},{t:"Respect",p:20},{t:"Communication",p:14},{t:"Partnership",p:12}]},
+    {q:"Name a fear people have about long-distance relationships specifically.", answers:[{t:"Falling for someone else",p:28},{t:"Growing apart emotionally",p:24},{t:"Missing important moments",p:20},{t:"The distance never ending",p:16},{t:"Losing the spark",p:12}]},
+    {q:"Name something that helps couples feel emotionally close despite physical distance.", answers:[{t:"Deep conversations",p:30},{t:"Being vulnerable and honest",p:24},{t:"Consistent communication",p:18},{t:"Sharing daily life details",p:16},{t:"Trust",p:12}]},
+    {q:"Name a sign someone has truly healed from past heartbreak.", answers:[{t:"They can trust again",p:30},{t:"They don't compare new partners to old ones",p:24},{t:"They feel at peace with the past",p:18},{t:"They're open to love again",p:16},{t:"They've forgiven, even if not forgotten",p:12}]},
+    {q:"Name something that makes people believe in \"soulmates.\"", answers:[{t:"An instant connection",p:28},{t:"Feeling like you've known them forever",p:24},{t:"Everything just makes sense together",p:20},{t:"Shared values and understanding",p:16},{t:"A love that feels effortless",p:12}]},
+    {q:"Name a truth about love that takes time to understand.", answers:[{t:"It's a daily choice",p:30},{t:"It requires effort, not just feeling",p:24},{t:"It's not always easy, but it's worth it",p:18},{t:"Real love is patient",p:16},{t:"The right person makes hard things easier",p:12}]},
+    {q:"Name something that helps a couple feel spiritually or emotionally aligned.", answers:[{t:"Shared values",p:28},{t:"Deep conversations",p:24},{t:"Mutual respect for beliefs",p:20},{t:"Supporting each other's growth",p:16},{t:"A sense of purpose together",p:12}]},
+    {q:"Name a way people know they've found \"their person.\"", answers:[{t:"Life feels easier with them",p:28},{t:"They accept you fully",p:24},{t:"You can't imagine a future without them",p:20},{t:"They challenge you to grow",p:16},{t:"Being with them feels like peace",p:12}]},
+    {q:"Name something that makes long-distance love a true test of character.", answers:[{t:"Loyalty despite temptation",p:28},{t:"Patience during hard times",p:24},{t:"Commitment without daily presence",p:20},{t:"Trust without constant reassurance",p:16},{t:"Choosing them again and again",p:12}]},
+    {q:"Name a reason people say love requires sacrifice.", answers:[{t:"Prioritizing the relationship sometimes",p:28},{t:"Compromising on personal wants",p:24},{t:"Making room for someone else's needs",p:20},{t:"Giving up comfort for growth",p:16},{t:"Choosing \"us\" over \"me\" sometimes",p:12}]},
+    {q:"Name something that helps someone let go of fear in a relationship.", answers:[{t:"Trust",p:28},{t:"Time",p:24},{t:"A partner's consistency",p:20},{t:"Self-work",p:16},{t:"Facing it head-on together",p:12}]},
+    {q:"Name a deep truth about long-distance relationships people don't talk about enough.", answers:[{t:"It's genuinely hard",p:30},{t:"It requires more intentional effort",p:24},{t:"Loneliness is real",p:20},{t:"It's not for everyone",p:14},{t:"The reunion makes it worth it",p:12}]},
+    {q:"Name something that shows a relationship has real depth.", answers:[{t:"Comfortable silence",p:28},{t:"Deep vulnerability",p:24},{t:"Supporting each other's dreams",p:20},{t:"Growing together, not apart",p:16},{t:"True understanding",p:12}]},
+    {q:"Name a reason people say the hardest part of love is trusting again after being hurt.", answers:[{t:"Past pain lingers",p:30},{t:"Fear of repeating history",p:24},{t:"Walls take time to come down",p:18},{t:"Vulnerability feels risky",p:16},{t:"It requires real courage",p:12}]},
+    {q:"Name something that helps couples navigate uncertainty about the future.", answers:[{t:"Open communication",p:28},{t:"Trust in each other",p:24},{t:"Taking things one step at a time",p:20},{t:"Faith in the relationship",p:16},{t:"Facing it as a team",p:12}]},
+    {q:"Name a way people express love that isn't romantic but still deep.", answers:[{t:"Showing up consistently",p:28},{t:"Listening without judgment",p:24},{t:"Supporting through hard times",p:20},{t:"Sacrificing for their wellbeing",p:16},{t:"Choosing them daily",p:12}]},
+    {q:"Name something that makes a couple's story feel meant to be.", answers:[{t:"Overcoming odds to be together",p:28},{t:"A timing that just worked out",p:24},{t:"Feeling connected instantly",p:20},{t:"Growing through challenges together",p:16},{t:"A love that keeps choosing itself",p:12}]},
+    {q:"Name a reason people say the right relationship makes you feel more like yourself.", answers:[{t:"You don't have to pretend",p:30},{t:"You're accepted as you are",p:24},{t:"It brings out your best qualities",p:18},{t:"You feel free to grow",p:16},{t:"There's no need for masks",p:12}]},
+    {q:"Name something that helps a couple through a season of doubt.", answers:[{t:"Honest conversations",p:28},{t:"Remembering why they started",p:24},{t:"Trusting the process",p:20},{t:"Leaning on each other",p:16},{t:"Patience",p:12}]},
+    {q:"Name a deep reason people choose to fight for a relationship instead of giving up.", answers:[{t:"They believe in what they have",p:30},{t:"The love is worth the effort",p:24},{t:"They see a future together",p:18},{t:"They've grown too close to walk away",p:16},{t:"They know good things take work",p:12}]},
+    {q:"Name something that makes vulnerability in long-distance relationships especially important.", answers:[{t:"You can't rely on physical presence to reassure",p:30},{t:"Words and honesty carry more weight",p:24},{t:"Misunderstandings are easier without body language",p:18},{t:"Trust has to be built through communication",p:16},{t:"It closes the emotional distance",p:12}]},
+    {q:"Name a reason people say you teach people how to treat you.", answers:[{t:"Setting boundaries shapes behavior",p:30},{t:"Tolerating less sets a standard",p:24},{t:"Self-respect influences respect from others",p:18},{t:"Your actions set expectations",p:16},{t:"It reflects your own self-worth",p:12}]},
+    {q:"Name something that helps a couple define what commitment truly means to them.", answers:[{t:"Open conversations about expectations",p:28},{t:"Aligning on values",p:24},{t:"Discussing the future honestly",p:20},{t:"Understanding each other's definition of loyalty",p:16},{t:"Revisiting it as the relationship grows",p:12}]},
+    {q:"Name a deep quality that keeps people falling in love with the same person over and over.", answers:[{t:"Continued growth",p:28},{t:"Consistency",p:24},{t:"Deepening trust",p:20},{t:"New layers of understanding",p:16},{t:"Choosing each other daily",p:12}]},
+    {q:"Name something that makes distance a strange kind of gift in a relationship.", answers:[{t:"It teaches patience",p:28},{t:"It proves commitment",p:24},{t:"It deepens communication",p:20},{t:"It makes reunions sweeter",p:16},{t:"It reveals what truly matters",p:12}]},
+    {q:"Name a reason some of the strongest couples have been through hard times together.", answers:[{t:"Adversity reveals true character",p:30},{t:"Shared struggle builds a bond",p:24},{t:"They learn to trust each other more",p:18},{t:"It proves they can handle anything",p:16},{t:"It strengthens commitment",p:12}]},
+    {q:"Name something that helps people trust the timing of their love story.", answers:[{t:"Reflecting on how far they've come",p:28},{t:"Believing things happen for a reason",p:24},{t:"Seeing the growth it caused",p:20},{t:"Trusting it was worth the wait",p:16},{t:"Faith in the journey",p:12}]},
+    {q:"Name a reason people say real love isn't always easy.", answers:[{t:"It requires effort and patience",p:30},{t:"Growth can be uncomfortable",p:24},{t:"Compromise isn't always simple",p:18},{t:"Hard seasons test commitment",p:16},{t:"But it's still worth it",p:12}]},
+    {q:"Name something that helps a couple feel truly known by each other.", answers:[{t:"Deep, honest conversations",p:28},{t:"Sharing fears and dreams",p:24},{t:"Being vulnerable",p:20},{t:"Time and consistency",p:16},{t:"Genuine curiosity about each other",p:12}]},
+    {q:"Name a deep way distance changes how people express love.", answers:[{t:"Through words more than actions",p:28},{t:"Through consistency instead of presence",p:24},{t:"Through patience",p:20},{t:"Through trust instead of certainty",p:16},{t:"Through intentional effort",p:12}]},
+    {q:"Name something that helps a relationship feel like \"home.\"", answers:[{t:"Feeling safe with them",p:30},{t:"Being fully yourself around them",p:24},{t:"A sense of belonging",p:18},{t:"Comfort in their presence",p:16},{t:"Unconditional acceptance",p:12}]},
+    {q:"Name a reason people say you should love someone for who they are, not who they could be.", answers:[{t:"It avoids disappointment",p:28},{t:"It's more honest",p:24},{t:"It respects their true self",p:20},{t:"Growth should come from within",p:16},{t:"Love shouldn't come with conditions",p:12}]},
+    {q:"Name something that shows a couple has truly grown together, not just apart.", answers:[{t:"Shared milestones",p:28},{t:"Facing challenges as a team",p:24},{t:"Evolving values together",p:20},{t:"Supporting each other's changes",p:16},{t:"Growing closer through hardship",p:12}]},
+    {q:"Name a deep reason distance can make a relationship stronger in the long run.", answers:[{t:"It builds unshakable trust",p:30},{t:"It proves love isn't dependent on convenience",p:24},{t:"It strengthens communication skills",p:18},{t:"It reveals true commitment",p:16},{t:"It makes the connection more intentional",p:12}]},
+    {q:"Name something that helps people believe love is worth the risk.", answers:[{t:"Past experiences of good love",p:28},{t:"Hope for the future",p:24},{t:"Trust in the process",p:20},{t:"Believing connection is rare and valuable",p:16},{t:"The alternative feels worse",p:12}]},
+    {q:"Name a way people show emotional maturity in a relationship.", answers:[{t:"Taking accountability",p:28},{t:"Communicating instead of shutting down",p:24},{t:"Managing emotions calmly",p:20},{t:"Apologizing sincerely",p:16},{t:"Growing from mistakes",p:12}]},
+    {q:"Name something that helps couples navigate feeling like they're \"not enough\" for each other at times.", answers:[{t:"Reassurance",p:28},{t:"Open conversations",p:24},{t:"Reminding each other of their worth",p:20},{t:"Patience",p:16},{t:"Choosing to believe in the relationship",p:12}]},
+    {q:"Name a reason people say the strongest love stories involve real struggle.", answers:[{t:"It proves resilience",p:30},{t:"It deepens the bond",p:24},{t:"It tests true commitment",p:18},{t:"It makes success sweeter",p:16},{t:"It builds unshakeable trust",p:12}]},
+    {q:"Name something that helps a couple define \"enough\" time together despite distance.", answers:[{t:"Quality over quantity",p:28},{t:"Being fully present during calls",p:24},{t:"Making the most of visits",p:20},{t:"Consistent small moments",p:16},{t:"Prioritizing meaningful connection",p:12}]},
+    {q:"Name a deep reason people fear losing \"the one.\"", answers:[{t:"The connection feels irreplaceable",p:30},{t:"They've built a life around them",p:24},{t:"The thought of starting over",p:18},{t:"The depth of the bond",p:16},{t:"Fear of being truly alone again",p:12}]},
+    {q:"Name something that shows a relationship has reached true partnership.", answers:[{t:"Shared decision-making",p:28},{t:"Equal effort",p:24},{t:"Facing life as a team",p:20},{t:"Trusting each other fully",p:16},{t:"Supporting each other unconditionally",p:12}]},
+    {q:"Name a reason people say you find out who someone really is during hard times.", answers:[{t:"True character shows under pressure",p:30},{t:"Actions during struggle reveal truth",p:24},{t:"Crisis reveals priorities",p:18},{t:"It shows what they're willing to fight for",p:16},{t:"It exposes real commitment",p:12}]},
+    {q:"Name something that helps a couple believe their love can outlast anything, including distance.", answers:[{t:"Their history of getting through hard things",p:28},{t:"Consistent effort from both sides",p:24},{t:"Deep trust",p:20},{t:"A clear vision of their future",p:16},{t:"Faith in each other",p:12}]},
+    {q:"Name a deep way people show they're truly invested in a relationship.", answers:[{t:"Prioritizing it over convenience",p:28},{t:"Making sacrifices without resentment",p:24},{t:"Consistent effort over time",p:20},{t:"Choosing it even when it's hard",p:16},{t:"Long-term planning together",p:12}]},
+    {q:"Name something that makes reconciling after a big fight meaningful.", answers:[{t:"Genuine understanding, not just an apology",p:28},{t:"Real change afterward",p:24},{t:"Rebuilding trust",p:20},{t:"Choosing to move forward together",p:16},{t:"Learning from what caused it",p:12}]},
+    {q:"Name a reason people say the wait for the right person is worth it.", answers:[{t:"Real love feels different",p:30},{t:"Rushing leads to regret",p:24},{t:"Good things take time to build",p:18},{t:"The right timing matters",p:16},{t:"Patience leads to something real",p:12}]},
+    {q:"Name something that helps a couple feel unshakeable, even during hard seasons.", answers:[{t:"A strong foundation of trust",p:28},{t:"Consistent communication",p:24},{t:"A shared belief in \"us\"",p:20},{t:"History of overcoming hardship together",p:16},{t:"Unconditional commitment",p:12}]},
+    {q:"Name a deep reason people say communication is an act of love.", answers:[{t:"It shows you care enough to be honest",p:30},{t:"It requires vulnerability",p:24},{t:"It prevents unnecessary hurt",p:18},{t:"It shows respect",p:16},{t:"It's how connection is built",p:12}]},
+    {q:"Name something that helps a couple believe distance won't break them.", answers:[{t:"Their history together",p:28},{t:"Consistent trust and honesty",p:24},{t:"A shared plan for the future",p:20},{t:"Deep emotional connection",p:16},{t:"Belief in what they've built",p:12}]},
+    {q:"Name a reason people say the depth of love is shown in hard moments, not easy ones.", answers:[{t:"Anyone can love when things are easy",p:30},{t:"True commitment shows under pressure",p:24},{t:"Struggle reveals real priorities",p:18},{t:"Easy love isn't tested",p:16},{t:"Hard moments show what you're made of",p:12}]},
+    {q:"Name something that helps couples believe in \"meant to be\" despite obstacles like distance.", answers:[{t:"Reflecting on how they've overcome things so far",p:28},{t:"Faith in their connection",p:24},{t:"A sense that it's worth fighting for",p:20},{t:"Trusting the journey",p:16},{t:"Believing some love is rare",p:12}]},
+    {q:"Name a deep way people show they've chosen growth over comfort in a relationship.", answers:[{t:"Working through hard conversations instead of avoiding them",p:28},{t:"Facing fears together",p:24},{t:"Being willing to change for the better",p:20},{t:"Prioritizing the relationship's health",p:16},{t:"Choosing honesty over avoidance",p:12}]},
+    {q:"Name something that helps couples build a legacy of love, beyond just romance.", answers:[{t:"Shared values passed down",p:28},{t:"A strong example for others",p:24},{t:"A partnership built on respect",p:20},{t:"A story worth telling",p:16},{t:"A love that inspires",p:12}]},
+    {q:"Name a reason people say you should never take a good love for granted.", answers:[{t:"Good love is rare",p:30},{t:"It requires ongoing effort to keep",p:24},{t:"Complacency can break it",p:18},{t:"Appreciation keeps it strong",p:16},{t:"Not everyone finds it",p:12}]},
+    {q:"Name something that helps a couple feel like their love has \"purpose.\"", answers:[{t:"Growing together toward shared goals",p:28},{t:"Supporting each other's dreams",p:24},{t:"Building something meaningful together",p:20},{t:"A sense of partnership in life",p:16},{t:"Making each other better",p:12}]},
+    {q:"Name a deep reason distance teaches people what truly matters in love.", answers:[{t:"It strips away distractions",p:30},{t:"It forces real communication",p:24},{t:"It reveals what you're willing to fight for",p:18},{t:"It shows the depth of commitment",p:16},{t:"It clarifies priorities",p:12}]},
+    {q:"Name something that helps people believe they can love again after heartbreak.", answers:[{t:"Healing over time",p:30},{t:"Learning from the past",p:24},{t:"Trusting themselves again",p:18},{t:"Meeting someone who feels different or safe",p:16},{t:"Choosing hope over fear",p:12}]},
+    {q:"Name a reason people say real love requires both passion and stability.", answers:[{t:"Passion keeps it exciting, stability keeps it lasting",p:30},{t:"Balance sustains long-term connection",p:24},{t:"One without the other feels incomplete",p:18},{t:"Both build a fulfilling partnership",p:16},{t:"It creates lasting depth",p:12}]},
+    {q:"Name something that shows a couple has built something rare and lasting.", answers:[{t:"Weathering hard times together",p:28},{t:"Consistent choice of each other",p:24},{t:"Deep mutual respect",p:20},{t:"A bond that only deepens with time",p:16},{t:"Trust that's been tested and held",p:12}]},
+    {q:"Name a deep reason people say \"the distance was worth it\" once they're finally together.", answers:[{t:"It proves the love was real",p:30},{t:"It makes being together sweeter",p:24},{t:"It shows what they were willing to endure",p:18},{t:"It strengthens the relationship's foundation",p:16},{t:"Every hard moment made sense",p:12}]},
+    {q:"Name something that helps a couple define what \"forever\" really means to them.", answers:[{t:"Choosing each other daily",p:28},{t:"Committing through hard and easy seasons",p:24},{t:"Building a shared future",p:20},{t:"Trusting the journey together",p:16},{t:"A love that keeps growing",p:12}]},
+    {q:"Name a reason people say enduring love looks different than romantic movies.", answers:[{t:"It's built through small daily choices",p:30},{t:"It requires real effort, not grand gestures alone",p:24},{t:"It includes hard, unglamorous moments",p:18},{t:"It's quieter but deeper",p:16},{t:"It's sustained, not just felt",p:12}]},
+    {q:"Name something that helps a couple trust that their love is unconditional.", answers:[{t:"Being loved through mistakes",p:28},{t:"Consistent support through hard times",p:24},{t:"Acceptance without conditions",p:20},{t:"Choosing each other regardless of circumstance",p:16},{t:"A bond that doesn't waver",p:12}]},
+    {q:"Name a deep truth about long-distance love that only those who've lived it understand.", answers:[{t:"The ache of missing someone constantly",p:30},{t:"The strength it takes to stay committed",p:24},{t:"How much you learn about patience",p:18},{t:"How communication becomes everything",p:16},{t:"How sweet the reunion truly is",p:12}]},
+    {q:"Name something that helps a couple believe their love story is still being written.", answers:[{t:"Continued growth together",p:28},{t:"New goals and dreams ahead",p:24},{t:"A belief that the best is yet to come",p:20},{t:"Choosing to keep building together",p:16},{t:"Hope for the future",p:12}]},
+    {q:"Name a final truth about what makes a long-distance love story worth telling.", answers:[{t:"It proves love can survive anything",p:30},{t:"It shows real commitment and patience",p:24},{t:"It's a story of choosing each other despite everything",p:20},{t:"It becomes a testament to real love",p:16},{t:"It ends with being together, stronger than ever",p:10}]}
+  ]}
+];
+
+/* =====================================================================
+   ANSWER MATCHING
+   Fuzzy-matches typed guesses to answers without needing a hand-built
+   keyword list for every one of the 300 answers.
+===================================================================== */
+function normalize(s){
+  return (s||"").toLowerCase().replace(/[^a-z0-9\s]/g,"").replace(/\b(a|an|the)\b/g,"").replace(/\s+/g," ").trim();
+}
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  if(m===0) return n; if(n===0) return m;
+  const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i;
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      dp[i][j]=a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j-1],dp[i-1][j],dp[i][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+function isMatch(guess, answerText){
+  const g=normalize(guess), a=normalize(answerText);
+  if(!g) return false;
+  if(g===a) return true;
+  if(a.length>=4 && (a.includes(g)||g.includes(a)) && g.length>=3) return true;
+  const gw=g.split(" ").filter(w=>w.length>=4);
+  const aw=a.split(" ").filter(w=>w.length>=4);
+  for(const w of gw){ if(aw.includes(w)) return true; }
+  for(const w of aw){ if(gw.includes(w)) return true; }
+  if(g.length>=4 && a.length>=4 && levenshtein(g,a)<=2) return true;
+  return false;
+}
+function findMatchingIndex(guess, answers, revealed){
+  for(let i=0;i<answers.length;i++){
+    if(revealed[i]) continue;
+    if(isMatch(guess, answers[i].t)) return i;
+  }
+  return -1;
+}
+
+/* =====================================================================
+   APP STATE + SUPABASE WIRING
+===================================================================== */
+const App = {
+  me:null,            // 'p1' | 'p2'
+  code:null,
+  ref:null,
+  state:null,          // last known room state
+  timerInterval:null,
+};
+
+function genCode(){
+  const letters="ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let c=""; for(let i=0;i<4;i++) c+=letters[Math.floor(Math.random()*letters.length)];
+  return c;
+}
+
+function el(id){ return document.getElementById(id); }
+function show(id){ el(id).classList.remove("hidden"); }
+function hide(id){ el(id).classList.add("hidden"); }
+
+function requireBackend(){
+  if(!backendReady){
+    el("homeError").textContent = "Supabase isn't configured yet — paste your Project URL and anon key near the top of this HTML file to enable live play.";
+    return false;
+  }
+  return true;
+}
+
+function initialRoomState(rounds){
+  return {
+    createdAt: Date.now(),
+    rounds: rounds,
+    round: 1,
+    turnPicker: "p1",
+    scores: {p1:0, p2:0},
+    players: {},
+    phase: "lobby",
+    category: null,
+    catKey: null,
+    qIndex: null,
+    revealed: [false,false,false,false,false],
+    usedQuestions: {},
+    faceoff: {buzzedBy:null, first:null},
+    activePlayer: null,
+    timerEnd: null,
+    ready: {p1:false, p2:false}
+  };
+}
+
+/* ---------------- Home screen actions ---------------- */
+el("btnCreate").addEventListener("click", ()=>{
+  if(!requireBackend()) return;
+  const name = el("nameInput").value.trim() || "Player 1";
+  const code = genCode();
+  App.code = code; App.me = "p1";
+  App.ref = new SupaRoomRef(sb, code);
+  const state = initialRoomState(6);
+  state.players.p1 = {name};
+  App.ref.set(state).then(()=>{
+    enterLobby();
+  }).catch(()=>{
+    el("homeError").textContent = "Couldn't reach Supabase. Check your config, table name, and that Realtime is enabled.";
+  });
+});
+
+el("btnJoin").addEventListener("click", ()=>{
+  if(!requireBackend()) return;
+  const code = el("roomJoin").value.trim().toUpperCase();
+  const name = el("nameInput").value.trim() || "Player 2";
+  if(!code){ el("homeError").textContent="Enter the room code your partner sent you."; return; }
+  const ref = new SupaRoomRef(sb, code);
+  ref.get().then(snap=>{
+    if(!snap.exists()){ el("homeError").textContent="No room found with that code."; return; }
+    const data = snap.val();
+    let slot = null;
+    if(!data.players || !data.players.p1) slot="p1";
+    else if(!data.players.p2) slot="p2";
+    if(!slot){ el("homeError").textContent="That room already has two players."; return; }
+    App.code=code; App.me=slot; App.ref=ref;
+    ref.child("players/"+slot).set({name}).then(enterLobby);
+  }).catch(err=>{
+    el("homeError").textContent="Couldn't reach the database. Check your Supabase config / table setup.";
+  });
+});
+
+function enterLobby(){
+  hide("screen-home"); show("screen-lobby");
+  el("lobbyCode").textContent = App.code;
+  App.ref.on("value", snap=>{
+    const data = snap.val();
+    if(!data) return;
+    App.state = data;
+    renderLobby(data);
+    if(data.phase && data.phase!=="lobby"){
+      enterGame();
+    }
+  });
+}
+
+function renderLobby(data){
+  const p1 = data.players && data.players.p1;
+  const p2 = data.players && data.players.p2;
+  el("nodeP1").textContent = p1 ? p1.name[0].toUpperCase() : "?";
+  el("nodeP2").textContent = p2 ? p2.name[0].toUpperCase() : "?";
+  el("nodeP1").className = "node " + (p1 ? "p1" : "off");
+  el("nodeP2").className = "node " + (p2 ? "p2" : "off");
+  el("threadEl").classList.toggle("live", !!(p1&&p2));
+  el("statusP1").textContent = p1 ? p1.name+" is in 💙" : "Waiting…";
+  el("statusP2").textContent = p2 ? p2.name+" is in 💗" : "Waiting…";
+  const bothIn = !!(p1&&p2);
+  el("btnStartGame").disabled = !(bothIn && App.me==="p1");
+  el("btnStartGame").textContent = bothIn ? (App.me==="p1" ? "Start the Game →" : "Waiting for Player 1 to start…") : "Waiting for both of you…";
+}
+
+document.querySelectorAll("#roundsPicker button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#roundsPicker button").forEach(x=>x.classList.remove("btn"));
+    document.querySelectorAll("#roundsPicker button").forEach(x=>x.classList.add("btn-ghost"));
+    b.classList.remove("btn-ghost"); b.classList.add("btn");
+    if(App.me==="p1" && App.ref) App.ref.child("rounds").set(parseInt(b.dataset.r,10));
+  });
+});
+
+el("btnStartGame").addEventListener("click", ()=>{
+  if(App.me!=="p1") return;
+  App.ref.update({ phase:"category" });
+});
+
+/* ---------------- Game screen ---------------- */
+function enterGame(){
+  hide("screen-lobby"); hide("screen-home"); show("screen-game");
+  el("gameRoomCode").textContent = App.code;
+  App.ref.off(); // remove lobby listener, attach game listener
+  App.ref.on("value", snap=>{
+    const data = snap.val();
+    if(!data) return;
+    App.state = data;
+    renderGame(data);
+  });
+}
+
+function myName(data){ return data.players[App.me] ? data.players[App.me].name : "You"; }
+function otherKey(){ return App.me==="p1" ? "p2" : "p1"; }
+
+function renderGame(data){
+  el("roundNum").textContent = data.round;
+  el("roundTotal").textContent = data.rounds;
+  el("nameP1Score").textContent = (data.players.p1&&data.players.p1.name)||"Player 1";
+  el("nameP2Score").textContent = (data.players.p2&&data.players.p2.name)||"Player 2";
+  el("scoreP1").textContent = data.scores.p1;
+  el("scoreP2").textContent = data.scores.p2;
+  el("pillP1").classList.toggle("me", App.me==="p1");
+  el("pillP2").classList.toggle("me", App.me==="p2");
+
+  ["phase-category","phase-faceoff","phase-play","phase-roundend","phase-gameover"].forEach(hide);
+
+  if(data.phase==="category") renderCategoryPick(data);
+  else if(data.phase==="faceoff") renderFaceoff(data);
+  else if(data.phase==="play") renderPlay(data);
+  else if(data.phase==="roundend") renderRoundEnd(data);
+  else if(data.phase==="gameover") renderGameOver(data);
+}
+
+/* ----- Category pick ----- */
+function renderCategoryPick(data){
+  show("phase-category");
+  const picker = data.turnPicker;
+  const isMe = picker===App.me;
+  el("pickerLabel").textContent = isMe ? "Your pick" : ((data.players[picker]&&data.players[picker].name)||"Your partner")+" is picking";
+  const grid = el("catGrid"); grid.innerHTML="";
+  if(isMe){
+    hide("waitingForPick");
+    CATEGORIES.forEach(cat=>{
+      const used = (data.usedQuestions && data.usedQuestions[cat.key]) || [];
+      const left = cat.questions.length - used.length;
+      const btn = document.createElement("button");
+      btn.className="cat-btn"; btn.dataset.flirty = cat.flirty?"1":"0";
+      btn.innerHTML = `<div class="name">${cat.name}</div><div class="left">${left>0?left+" of 100 left this cycle":"All 100 played — starting a fresh cycle"}</div>`;
+      btn.addEventListener("click", ()=> onPickCategory(cat, data));
+      grid.appendChild(btn);
+    });
+  } else {
+    show("waitingForPick");
+  }
+}
+
+function onPickCategory(cat, data){
+  if(cat.flirty){
+    el("flirtyModal").classList.remove("hidden");
+    el("flirtyConfirm").onclick = ()=>{ el("flirtyModal").classList.add("hidden"); startRoundWithCategory(cat, data); };
+    el("flirtyCancel").onclick = ()=>{ el("flirtyModal").classList.add("hidden"); };
+  } else {
+    startRoundWithCategory(cat, data);
+  }
+}
+
+function startRoundWithCategory(cat, data){
+  const used = (data.usedQuestions && data.usedQuestions[cat.key]) || [];
+  let pool = cat.questions.map((q,i)=>i).filter(i=>!used.includes(i));
+  let startingFreshCycle = false;
+  if(pool.length===0){
+    // Every question in this category has been played across all past
+    // rounds/sessions in this room. Start a brand-new no-repeat cycle
+    // instead of letting the "used" list grow forever.
+    pool = cat.questions.map((q,i)=>i);
+    startingFreshCycle = true;
+  }
+  const qIndex = pool[Math.floor(Math.random()*pool.length)];
+  const newUsed = {...(data.usedQuestions||{})};
+  newUsed[cat.key] = startingFreshCycle ? [qIndex] : [...used, qIndex];
+  App.ref.update({
+    phase:"faceoff",
+    catKey: cat.key,
+    qIndex: qIndex,
+    revealed:[false,false,false,false,false],
+    usedQuestions:newUsed,
+    faceoff:{buzzedBy:null, first:null}
+  });
+}
+
+function getQ(data){
+  const cat = CATEGORIES.find(c=>c.key===data.catKey);
+  const q = cat.questions[data.qIndex];
+  return {cat,q};
+}
+
+/* ----- Face-off ----- */
+function renderFaceoff(data){
+  show("phase-faceoff");
+  const {cat,q} = getQ(data);
+  el("faceoffCat").textContent = cat.name;
+  el("faceoffQuestion").textContent = q.q;
+  const ansWrap = el("faceoffAnswers"); ansWrap.innerHTML="";
+  q.answers.forEach((a,i)=>{
+    const row = document.createElement("div");
+    row.className = "ans-row" + (data.revealed[i] ? " revealed" : "");
+    row.innerHTML = `<div class="rank">${i+1}</div><div class="txt">${data.revealed[i]?a.t:"?????"}</div><div class="pts">${data.revealed[i]?a.p:""}</div>`;
+    ansWrap.appendChild(row);
+  });
+
+  const buzzedBy = data.faceoff && data.faceoff.buzzedBy;
+  if(!buzzedBy){
+    show("buzzZone"); hide("faceoffGuessArea"); hide("faceoffWaiting");
+    el("btnBuzz").disabled=false;
+  } else if(buzzedBy===App.me){
+    hide("buzzZone"); show("faceoffGuessArea"); hide("faceoffWaiting");
+  } else {
+    hide("buzzZone"); hide("faceoffGuessArea"); show("faceoffWaiting");
+    el("faceoffWaiting").textContent = (data.players[buzzedBy]&&data.players[buzzedBy].name)+" buzzed in first — waiting for their answer…";
+  }
+}
+
+el("btnBuzz").addEventListener("click", ()=>{
+  App.ref.child("faceoff/buzzedBy").transaction(cur=>{
+    if(cur===null) return App.me;
+    return; // abort, already set
+  });
+});
+
+el("btnFaceoffGuess").addEventListener("click", submitFaceoffGuess);
+el("faceoffGuessInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitFaceoffGuess(); });
+
+function submitFaceoffGuess(){
+  const data = App.state;
+  const {q} = getQ(data);
+  const guess = el("faceoffGuessInput").value;
+  el("faceoffGuessInput").value="";
+  const idx = findMatchingIndex(guess, q.answers, data.revealed);
+  if(idx>=0){
+    const revealed = [...data.revealed]; revealed[idx]=true;
+    const scores = {...data.scores}; scores[App.me]+=q.answers[idx].p;
+    App.ref.update({
+      revealed, scores,
+      activePlayer: App.me,
+      timerEnd: Date.now()+60000,
+      phase:"play"
+    });
+  } else {
+    el("faceoffFeedback").textContent = "Not on the board — control passes to your partner!";
+    el("faceoffFeedback").className = "feedback bad";
+    App.ref.update({
+      activePlayer: otherKey(),
+      timerEnd: Date.now()+60000,
+      phase:"play"
+    });
+  }
+}
+
+/* ----- Play (60s turn) ----- */
+function renderPlay(data){
+  show("phase-play");
+  const {cat,q} = getQ(data);
+  el("playCat").textContent = cat.name;
+  el("playQuestion").textContent = q.q;
+  const ansWrap = el("playAnswers"); ansWrap.innerHTML="";
+  q.answers.forEach((a,i)=>{
+    const row = document.createElement("div");
+    row.className = "ans-row" + (data.revealed[i] ? " revealed" : "");
+    row.innerHTML = `<div class="rank">${i+1}</div><div class="txt">${data.revealed[i]?a.t:"?????"}</div><div class="pts">${data.revealed[i]?a.p:""}</div>`;
+    ansWrap.appendChild(row);
+  });
+
+  const isActive = data.activePlayer===App.me;
+  el("playInputArea").classList.toggle("hidden", !isActive);
+  el("playWaiting").classList.toggle("hidden", isActive);
+  if(!isActive){
+    el("playWaiting").innerHTML = `💛 ${(data.players[data.activePlayer]&&data.players[data.activePlayer].name)||"Your partner"} is playing — you're spectating live. Cheer them on!`;
+  }
+
+  startTimerLoop(data);
+
+  const allFound = data.revealed.every(Boolean);
+  if(allFound && data.phase==="play"){
+    if(isActive) endRound(data); // only the active player writes, avoids race
+  }
+}
+
+function startTimerLoop(data){
+  if(App.timerInterval) clearInterval(App.timerInterval);
+  const tick = ()=>{
+    const remain = Math.max(0, Math.round((data.timerEnd - Date.now())/1000));
+    el("timerRing").textContent = remain;
+    el("timerRing").classList.toggle("warn", remain<=10);
+    el("timerFill").style.width = Math.max(0,(remain/60*100))+"%";
+    if(remain<=0){
+      clearInterval(App.timerInterval);
+      if(data.activePlayer===App.me && data.phase==="play"){
+        endRound(App.state);
+      }
+    }
+  };
+  tick();
+  App.timerInterval = setInterval(tick, 250);
+}
+
+el("btnPlayGuess").addEventListener("click", submitPlayGuess);
+el("playGuessInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitPlayGuess(); });
+
+function submitPlayGuess(){
+  const data = App.state;
+  if(data.activePlayer!==App.me || data.phase!=="play") return;
+  const {q} = getQ(data);
+  const guess = el("playGuessInput").value;
+  el("playGuessInput").value="";
+  if(Date.now() > data.timerEnd){ return; }
+  const idx = findMatchingIndex(guess, q.answers, data.revealed);
+  if(idx>=0){
+    const revealed=[...data.revealed]; revealed[idx]=true;
+    const scores={...data.scores}; scores[App.me]+=q.answers[idx].p;
+    el("playFeedback").textContent = "✓ On the board! +"+q.answers[idx].p;
+    el("playFeedback").className="feedback good";
+    App.ref.update({revealed, scores}).then(()=>{
+      if(revealed.every(Boolean)) endRound({...data, revealed, scores});
+    });
+  } else {
+    el("playFeedback").textContent = "Not on the board — keep going, clock's still running!";
+    el("playFeedback").className="feedback bad";
+  }
+}
+
+function endRound(data){
+  if(App.timerInterval) clearInterval(App.timerInterval);
+  App.ref.update({ phase:"roundend" });
+}
+
+/* ----- Round end ----- */
+function renderRoundEnd(data){
+  show("phase-roundend");
+  const {q} = getQ(data);
+  const wrap = el("roundEndAnswers"); wrap.innerHTML="";
+  let roundPts=0;
+  q.answers.forEach((a,i)=>{
+    const row=document.createElement("div");
+    row.className="ans-row"+(data.revealed[i]?" revealed":"");
+    row.innerHTML = `<div class="rank">${i+1}</div><div class="txt">${a.t}</div><div class="pts">${a.p}</div>`;
+    wrap.appendChild(row);
+    if(data.revealed[i]) roundPts+=a.p;
+  });
+  el("roundEndTitle").textContent = data.revealed.every(Boolean) ? "You cleared the board! 🎉" : "Time's up!";
+  el("roundEndScoreLine").textContent = `${data.players.p1.name}: ${data.scores.p1}  ·  ${data.players.p2.name}: ${data.scores.p2}`;
+
+  const nextIsMe = data.turnPicker!==App.me; // the person who did NOT pick continues the rotation
+  const canAdvance = App.me==="p1"; // p1 drives phase transitions to avoid double-writes
+  el("btnNextRound").classList.toggle("hidden", !canAdvance);
+  el("roundEndWaiting").classList.toggle("hidden", canAdvance);
+}
+
+el("btnNextRound").addEventListener("click", ()=>{
+  const data = App.state;
+  const nextRound = data.round+1;
+  if(nextRound > data.rounds){
+    App.ref.update({ phase:"gameover" });
+  } else {
+    App.ref.update({
+      phase:"category",
+      round: nextRound,
+      turnPicker: data.turnPicker==="p1" ? "p2" : "p1",
+      activePlayer:null,
+      faceoff:{buzzedBy:null, first:null}
+    });
+  }
+});
+
+/* ----- Game over ----- */
+function renderGameOver(data){
+  show("phase-gameover");
+  const p1=data.scores.p1, p2=data.scores.p2;
+  const n1=data.players.p1.name, n2=data.players.p2.name;
+  let title, sub;
+  if(p1===p2){ title="It's a perfect tie 💛"; sub=`${n1} and ${n2} both scored ${p1}. Some things aren't meant to be settled by trivia.`; }
+  else{
+    const winner = p1>p2?n1:n2;
+    title = winner+" wins the Feud! 🏆";
+    sub = `Final score — ${n1}: ${p1} · ${n2}: ${p2}. Either way, the real prize is closing the distance.`;
+  }
+  el("gameOverTitle").textContent = title;
+  el("gameOverSub").textContent = sub;
+}
+
+el("btnPlayAgain").addEventListener("click", ()=>{
+  if(App.me!=="p1") { App.ref.update({}); return; }
+  const rounds = App.state.rounds;
+  const players = App.state.players;
+  const priorHistory = App.state.usedQuestions || {}; // keep the question history!
+  const fresh = initialRoomState(rounds);
+  fresh.players = players;
+  fresh.phase="lobby";
+  fresh.usedQuestions = priorHistory; // carries forward so nothing repeats until all 500 are played
+  App.ref.set(fresh).then(()=>{
+    location.reload();
+  });
+});
+
+/* ---------------- background stars ---------------- */
+(function starfield(){
+  const wrap = el("stars");
+  for(let i=0;i<60;i++){
+    const s=document.createElement("span");
+    s.style.left = Math.random()*100+"%";
+    s.style.top = Math.random()*100+"%";
+    s.style.animationDelay = (Math.random()*3.5)+"s";
+    wrap.appendChild(s);
+  }
+})();
+</script>
+</body>
+</html>
